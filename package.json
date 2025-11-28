@@ -1,6 +1,6 @@
 {
   "name": "com.techcosmos.skillsystem",
-  "displayName": "TechCosmos Skill System Framework",
+  "displayName": "SkillSystem",
   "version": "1.0.0",
   "description": "A highly extensible, generic skill system framework for Unity games. Supports customizable conditions, mechanisms, and multi-layer skill architecture.",
   "keywords": [
