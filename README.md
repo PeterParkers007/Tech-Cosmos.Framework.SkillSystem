@@ -156,14 +156,6 @@ unitEvent.Subscribe("OnAttack", OnAttackHandler);
 unitEvent.Trigger("OnAttack", skillContext);
 ```
 
-## 示例项目
-
-包中包含两个示例场景：
-1. **BasicUsage**: 基础使用示例
-2. **AdvancedConditions**: 高级条件组合演示
-
-通过 Package Manager 窗口导入示例即可查看。
-
 ## API 文档
 
 ### 核心接口
