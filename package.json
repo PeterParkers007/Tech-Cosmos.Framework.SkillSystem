@@ -1,0 +1,24 @@
+{
+  "name": "com.techcosmos.skillsystem",
+  "displayName": "TechCosmos Skill System Framework",
+  "version": "1.0.0",
+  "description": "A highly extensible, generic skill system framework for Unity games. Supports customizable conditions, mechanisms, and multi-layer skill architecture.",
+  "keywords": [
+    "skill",
+    "framework",
+    "system",
+    "ability",
+    "rpg",
+    "game",
+    "extensible",
+    "generic"
+  ],
+  "category": "Gameplay",
+  "author": {
+    "name": "Tech-Cosmos",
+    "email": "3427463164@qq.com",
+    "url": "https://github.com/PeterParkers007/Tech-Cosmos"
+  },
+  "unity": "2022.3",
+  "unityRelease": "0f1"
+}
