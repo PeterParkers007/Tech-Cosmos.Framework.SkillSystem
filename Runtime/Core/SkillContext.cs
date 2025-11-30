@@ -5,5 +5,7 @@ namespace TechCosmos.SkillSystem.Runtime
     {
         public T caster;
         public T target;
+
+        public Vector3 targetPos;
     }
 }
