@@ -2,7 +2,7 @@
 using System;
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public class NotCondition<T> : Condition<T> where T : IUnit<T>
+    public class NotCondition<T> : Condition<T> where T : class, IUnit<T>
     {
         private Condition<T> _condition;
 

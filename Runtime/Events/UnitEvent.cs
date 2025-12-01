@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public class UnitEvent<T> where T : IUnit<T>
+    public class UnitEvent<T> where T : class, IUnit<T>
     {
         private Dictionary<string, Action<SkillContext<T>>> _events = new Dictionary<string, Action<SkillContext<T>>>();
 

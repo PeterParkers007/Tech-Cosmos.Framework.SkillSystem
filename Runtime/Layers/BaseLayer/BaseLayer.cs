@@ -1,6 +1,6 @@
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public abstract class BaseLayer<T> : IBaseLayer<T> where T : IUnit<T>
+    public abstract class BaseLayer<T> : IBaseLayer<T> where T : class, IUnit<T>
     {
         public ISkill<T> Skill { get; set; }
         public string TriggerEvent { get; set; }

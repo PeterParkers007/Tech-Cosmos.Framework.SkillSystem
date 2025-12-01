@@ -1,6 +1,6 @@
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public class InformationLayer<T> : IInformationLayer<T> where T : IUnit<T>
+    public class InformationLayer<T> : IInformationLayer<T> where T : class, IUnit<T>
     {
         public ISkill<T> Skill { get; set; }
         public string Name { get; set; }

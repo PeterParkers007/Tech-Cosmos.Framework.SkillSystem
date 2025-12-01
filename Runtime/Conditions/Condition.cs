@@ -1,6 +1,6 @@
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public abstract class Condition<T> where T : IUnit<T>
+    public abstract class Condition<T> where T : class, IUnit<T>
     {
         public abstract bool IsEligible(SkillContext<T> skillContext);
 

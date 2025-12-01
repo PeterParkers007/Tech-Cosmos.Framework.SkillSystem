@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public class SkillHolder<T> where T : IUnit<T>
+    public class SkillHolder<T> where T : class, IUnit<T>
     {
         private List<ISkill<T>> skillList = new();
         private UnitEvent<T> unitEvent;

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public class OrCondition<T> : Condition<T> where T : IUnit<T>
+    public class OrCondition<T> : Condition<T> where T : class, IUnit<T>
     {
         private List<Condition<T>> _conditions;
 

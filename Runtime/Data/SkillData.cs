@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace TechCosmos.SkillSystem.Runtime
 {
     [Serializable]
-    public class SkillData<T> where T : IUnit<T>
+    public class SkillData<T> where T : class, IUnit<T>
     {
         //»ù´¡²ã
         public SkillType SkillType;

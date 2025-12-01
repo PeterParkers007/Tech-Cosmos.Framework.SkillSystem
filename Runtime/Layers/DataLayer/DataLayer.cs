@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public class DataLayer<T> : IDataLayer<T> where T : IUnit<T>
+    public class DataLayer<T> : IDataLayer<T> where T : class, IUnit<T>
     {
         private Dictionary<string, object> _data = new();
         public ISkill<T> Skill { get; set; }

@@ -7,7 +7,7 @@ namespace TechCosmos.SkillSystem.Runtime
         private static Type _currentUnitType;
         private static bool _isInitialized = false;
 
-        public static void Initialize<T>() where T : IUnit<T>
+        public static void Initialize<T>() where T : class, IUnit<T>
         {
             _currentUnitType = typeof(T);
             _isInitialized = true;

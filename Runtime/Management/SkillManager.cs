@@ -1,6 +1,6 @@
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public static class SkillManager<T> where T : IUnit<T>
+    public static class SkillManager<T> where T : class, IUnit<T>
     {
         private static bool _initialized = false;
 

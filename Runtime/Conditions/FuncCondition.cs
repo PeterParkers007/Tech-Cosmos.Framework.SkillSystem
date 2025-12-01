@@ -2,7 +2,7 @@
 using System;
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public class FuncCondition<T> : Condition<T> where T : IUnit<T>
+    public class FuncCondition<T> : Condition<T> where T : class, IUnit<T>
     {
         private Func<SkillContext<T>, bool> _func;
 
