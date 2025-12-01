@@ -1,4 +1,4 @@
-// AND Ìõ¼ş£¨ËùÓĞÌõ¼ş¶¼ÒªÂú×ã£©
+ï»¿// AND æ¡ä»¶ï¼ˆæ‰€æœ‰æ¡ä»¶éƒ½è¦æ»¡è¶³ï¼‰
 using System.Collections.Generic;
 using System.Linq;
 namespace TechCosmos.SkillSystem.Runtime
@@ -15,7 +15,17 @@ namespace TechCosmos.SkillSystem.Runtime
         public override bool IsEligible(SkillContext<T> skillContext)
         {
             if (_conditions.Count == 0) return true;
-            return _conditions.All(condition => condition.IsEligible(skillContext));
+
+            // ä¼˜åŒ–ï¼šforå¾ªç¯ä»£æ›¿LINQ
+            var conditions = _conditions;
+            int count = conditions.Count;
+
+            for (int i = 0; i < count; i++)
+            {
+                if (!conditions[i].IsEligible(skillContext))
+                    return false;
+            }
+            return true;
         }
     }
 }

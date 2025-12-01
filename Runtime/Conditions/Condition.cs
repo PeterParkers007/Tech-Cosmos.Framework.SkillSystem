@@ -1,10 +1,10 @@
-namespace TechCosmos.SkillSystem.Runtime
+ï»¿namespace TechCosmos.SkillSystem.Runtime
 {
     public abstract class Condition<T> where T : class, IUnit<T>
     {
         public abstract bool IsEligible(SkillContext<T> skillContext);
 
-        // ÔËËã·ûÖØÔØ
+        // è¿ç®—ç¬¦é‡è½½
         public static Condition<T> operator &(Condition<T> left, Condition<T> right)
             => new AndCondition<T>(left, right);
 

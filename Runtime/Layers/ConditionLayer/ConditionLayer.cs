@@ -1,17 +1,19 @@
 using System.Collections.Generic;
-using System.Linq;
 namespace TechCosmos.SkillSystem.Runtime
 {
     public class ConditionLayer<T> : IConditionLayer<T> where T : class, IUnit<T>
     {
         public List<Condition<T>> Conditions { get; set; }
-        public ISkill<T> Skill { get; set; }
+        public ISkill<T> Skill { get; set; } 
 
         public bool CheckCondition(SkillContext<T> skillContext)
         {
-            foreach (var condition in Conditions)
+            var conditions = Conditions; 
+            int count = conditions.Count;
+
+            for (int i = 0; i < count; i++)
             {
-                if (!condition.IsEligible(skillContext))
+                if (!conditions[i].IsEligible(skillContext))
                     return false;
             }
             return true;
