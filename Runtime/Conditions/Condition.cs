@@ -4,14 +4,13 @@
     {
         public abstract bool IsEligible(SkillContext<T> skillContext);
 
-        // 运算符重载
         public static Condition<T> operator &(Condition<T> left, Condition<T> right)
-            => new AndCondition<T>(left, right);
+            => ConditionPool<T>.RentAnd(left, right);
 
         public static Condition<T> operator |(Condition<T> left, Condition<T> right)
-            => new OrCondition<T>(left, right);
+            => ConditionPool<T>.RentOr(left, right);
 
         public static Condition<T> operator !(Condition<T> condition)
-            => new NotCondition<T>(condition);
+            => ConditionPool<T>.RentNot(condition);
     }
 }

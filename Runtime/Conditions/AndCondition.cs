@@ -27,5 +27,16 @@ namespace TechCosmos.SkillSystem.Runtime
             }
             return true;
         }
+        // 新增：池化支持
+        public void Reinitialize(params Condition<T>[] conditions)
+        {
+            _conditions.Clear();
+            _conditions.AddRange(conditions.Where(c => c != null));
+        }
+
+        public void Clear()
+        {
+            _conditions.Clear();
+        }
     }
 }

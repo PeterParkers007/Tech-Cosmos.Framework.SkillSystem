@@ -27,5 +27,15 @@ namespace TechCosmos.SkillSystem.Runtime
             }
             return false;
         }
+        public void Reinitialize(params Condition<T>[] conditions)
+        {
+            _conditions.Clear();
+            _conditions.AddRange(conditions.Where(c => c != null));
+        }
+
+        public void Clear()
+        {
+            _conditions.Clear();
+        }
     }
 }
