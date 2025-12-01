@@ -22,9 +22,9 @@ namespace TechCosmos.SkillSystem.Runtime
             return _lastResult;
         }
 
-        private bool ContextEquals(SkillContext<T> a, SkillContext<T> b)
-            => ReferenceEquals(a.caster, b.caster) &&
-               ReferenceEquals(a.target, b.target) &&
-               a.targetPos == b.targetPos;
+        private bool ContextEquals(in SkillContext<T> a, in SkillContext<T> b)
+            => a.caster == b.caster &&      // 用 == 而不是 ReferenceEquals
+                a.target == b.target &&      // 尊重类型自己的相等性定义
+                a.targetPos == b.targetPos;
     }
 }
