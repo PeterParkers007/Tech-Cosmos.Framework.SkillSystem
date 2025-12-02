@@ -8,10 +8,10 @@ namespace TechCosmos.SkillSystem.Runtime
         public float cooldown;
         private float _nextAvailableTime;
 
-        public CooldownCondition(float cooldown, SkillData<T> skillData)
+        public CooldownCondition(float cooldown, SkillData<T> skillData = null)
         {
             this.cooldown = cooldown;
-            skillData.AddMechanism(StartCooldown);
+            if (skillData != null) skillData.AddMechanism(StartCooldown);
         }
 
         public override bool IsEligible(SkillContext<T> skillContext)
