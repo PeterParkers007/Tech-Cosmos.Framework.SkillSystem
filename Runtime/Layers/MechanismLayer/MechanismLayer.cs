@@ -4,33 +4,37 @@ namespace TechCosmos.SkillSystem.Runtime
 {
     public class MechanismLayer<T> : IMechanismLayer<T> where T : class, IUnit<T>
     {
-        private List<Action<SkillContext<T>>> _mechanisms = new List<Action<SkillContext<T>>>(6);
+        private List<Mechanism<T>> _mechanisms = new List<Mechanism<T>>();
+        private List<Action<SkillContext<T>>> _funcMechanisms = new List<Action<SkillContext<T>>>(6);
         public ISkill<T> Skill { get; set; }
 
         public void Mechanism(SkillContext<T> skillContext)
         {
             // 优化：局部变量 + for循环
+            var funcMechanisms = _funcMechanisms;
+            int funcCount = funcMechanisms.Count;
+
+            for (int i = 0; i < funcCount; i++)
+                funcMechanisms[i](skillContext);
+
             var mechanisms = _mechanisms;
-            int count = mechanisms.Count;
+            int mechanismsCount = mechanisms.Count;
 
-            for (int i = 0; i < count; i++)
-                mechanisms[i](skillContext);
+            for (int i = 0; i < mechanismsCount; i++)
+                mechanisms[i].Execute(skillContext);
         }
 
-        public MechanismLayer(List<Action<SkillContext<T>>> actions = null)
+        public MechanismLayer(List<Mechanism<T>> mechanisms = null,List<Action<SkillContext<T>>> actions = null)
         {
-            if (actions != null)
-                _mechanisms = new List<Action<SkillContext<T>>>(actions);
+            if (mechanisms != null) AddMechanism(mechanisms.ToArray());
+            if (actions != null) AddMechanism(actions.ToArray());
         }
 
-        public void AddActionMechanism(Action<SkillContext<T>> action) => _mechanisms.Add(action);
-        public void RemoveActionMechanism(Action<SkillContext<T>> action) => _mechanisms.Remove(action);
-        public void ClearMechanisms() => _mechanisms.Clear();
-
-        // 新增：批量添加优化
-        public void AddMechanisms(params Action<SkillContext<T>>[] actions)
-        {
-            _mechanisms.AddRange(actions);
-        }
+        public void AddMechanism(Action<SkillContext<T>> action) => _funcMechanisms.Add(action);
+        public void AddMechanism(Mechanism<T> mechanism) => _mechanisms.Add(mechanism);
+        public void AddMechanism(params Action<SkillContext<T>>[] actions) => _funcMechanisms.AddRange(actions);
+        public void AddMechanism(params Mechanism<T>[] mechanisms) => _mechanisms.AddRange(mechanisms);
+        public void RemoveActionMechanism(Action<SkillContext<T>> action) => _funcMechanisms.Remove(action);
+        public void ClearMechanisms() => _funcMechanisms.Clear();
     }
 }

@@ -13,7 +13,7 @@ namespace TechCosmos.SkillSystem.Runtime
 
         public override bool IsEligible(SkillContext<T> ctx)
         {
-            if (_hasCache && ContextEquals(_lastContext, ctx))
+            if (_hasCache && ContextEquals(_lastContext,ctx))
                 return _lastResult;
 
             _lastResult = _inner.IsEligible(ctx);
