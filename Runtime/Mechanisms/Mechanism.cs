@@ -10,10 +10,7 @@ namespace TechCosmos.SkillSystem.Runtime
             this.Context = context;
             this.DataLayer = dataLayer;
         }
-        public virtual void Execute(SkillContext<T> context)
-        {
-
-        }
+        public virtual void Execute(SkillContext<T> context){ }
         public virtual void SkillBack(ISkill<T> skill) { }
     }
 }
