@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace TechCosmos.SkillSystem.Runtime
 {
     [Serializable]
-    public class SkillData<T> where T : IUnit<T>
+    public class SkillData<T> where T : class, IUnit<T>
     {
         //基础层
         public SkillType SkillType;
@@ -17,15 +17,23 @@ namespace TechCosmos.SkillSystem.Runtime
         public string SkillDescription;
 
         //机制层
-        public List<Action<SkillContext<T>>> Mechanisms = new();
+        public List<Action<SkillContext<T>>> FuncMechanisms = new();
+        public List<Mechanism<T>> Mechanisms = new();
+        //数值层
+        public Dictionary<string,object> Data = new();
 
-        public void AddMechanism(Action<SkillContext<T>> mechanism) => Mechanisms.Add(mechanism);
-        public void AddMechanisms(Action<SkillContext<T>>[] mechanisms) => Mechanisms.AddRange(mechanisms);
-        public void RemoveMechanism(Action<SkillContext<T>> mechanism) => Mechanisms.Remove(mechanism);
+        public void SetValue<TValue>(string key, TValue value) => Data[key] = value;
+        public void SetFormula<TValue>(string key, Func<SkillContext<T>, TValue> formula)
+            => Data[key] = formula;
+        public void AddMechanism(Action<SkillContext<T>> mechanism) => FuncMechanisms.Add(mechanism);
+        public void AddMechanism(Mechanism<T> mechanism) => Mechanisms.Add(mechanism);
+        public void AddMechanism(params Action<SkillContext<T>>[] mechanisms) => FuncMechanisms.AddRange(mechanisms);
+        public void AddMechanism(params Mechanism<T>[] mechanisms) => Mechanisms.AddRange(mechanisms);
+        public void RemoveMechanism(Action<SkillContext<T>> mechanism) => FuncMechanisms.Remove(mechanism);
         public void AddCondition(Condition<T> condition) => Conditions.Add(condition);
-        public void AddConditions(Condition<T>[] conditions) => Conditions.AddRange(conditions);
+        public void AddCondition(Condition<T>[] conditions) => Conditions.AddRange(conditions);
         public void RemoveCondition(Condition<T> condition) => Conditions.Remove(condition);
-        public void ClearMechanisms() => Mechanisms.Clear();
-        public void ClearConditions() => Conditions.Clear();
+        public void ClearMechanism() => FuncMechanisms.Clear();
+        public void ClearCondition() => Conditions.Clear();
     }
 }

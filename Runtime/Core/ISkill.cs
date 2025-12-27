@@ -1,6 +1,6 @@
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public interface ISkill<T> where T : IUnit<T>
+    public interface ISkill<T> where T : class, IUnit<T>
     {
         IBaseLayer<T> BaseLayer { get; }
         IConditionLayer<T> ConditionLayer { get; }

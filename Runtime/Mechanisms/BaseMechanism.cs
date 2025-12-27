@@ -1,6 +1,6 @@
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public abstract class BaseMechanism<T> where T : IUnit<T>
+    public abstract class BaseMechanism<T> where T : class, IUnit<T>
     {
         public SkillContext<T> Context { get; }
         public IDataLayer<T> DataLayer { get; }

@@ -1,17 +1,16 @@
-namespace TechCosmos.SkillSystem.Runtime
+Ôªønamespace TechCosmos.SkillSystem.Runtime
 {
-    public abstract class Condition<T> where T : IUnit<T>
+    public abstract class Condition<T> where T : class, IUnit<T>
     {
         public abstract bool IsEligible(SkillContext<T> skillContext);
 
-        // ‘ÀÀ„∑˚÷ÿ‘ÿ
         public static Condition<T> operator &(Condition<T> left, Condition<T> right)
-            => new AndCondition<T>(left, right);
+            => ConditionPool<T>.RentAnd(left, right);
 
         public static Condition<T> operator |(Condition<T> left, Condition<T> right)
-            => new OrCondition<T>(left, right);
+            => ConditionPool<T>.RentOr(left, right);
 
         public static Condition<T> operator !(Condition<T> condition)
-            => new NotCondition<T>(condition);
+            => ConditionPool<T>.RentNot(condition);
     }
 }

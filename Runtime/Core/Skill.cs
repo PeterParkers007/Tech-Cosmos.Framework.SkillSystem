@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public class Skill<T> : ISkill<T> where T : IUnit<T>
+    public class Skill<T> : ISkill<T> where T : class, IUnit<T>
     {
         public IBaseLayer<T> BaseLayer { get; }
         public IConditionLayer<T> ConditionLayer { get; }

@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public class DataLayer<T> : IDataLayer<T> where T : IUnit<T>
+    public class DataLayer<T> : IDataLayer<T> where T : class, IUnit<T>
     {
         private Dictionary<string, object> _data = new();
         public ISkill<T> Skill { get; set; }
-
+        public DataLayer(Dictionary<string, object> data) => _data = data;
         public TValue GetValue<TValue>(string key, SkillContext<T> context)
         {
             if (!_data.ContainsKey(key))

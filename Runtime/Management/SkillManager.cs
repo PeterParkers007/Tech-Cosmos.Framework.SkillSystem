@@ -1,6 +1,6 @@
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public static class SkillManager<T> where T : IUnit<T>
+    public static class SkillManager<T> where T : class, IUnit<T>
     {
         private static bool _initialized = false;
 
@@ -17,8 +17,8 @@ namespace TechCosmos.SkillSystem.Runtime
 
             IConditionLayer<T> conditionLayer = new ConditionLayer<T>(data.Conditions);
             IInformationLayer<T> infoLayer = new InformationLayer<T>(data.SkillName, data.SkillDescription);
-            IMechanismLayer<T> mechanismLayer = new MechanismLayer<T>(data.Mechanisms);
-            IDataLayer<T> dataLayer = new DataLayer<T>();
+            IMechanismLayer<T> mechanismLayer = new MechanismLayer<T>(data.Mechanisms,data.FuncMechanisms);
+            IDataLayer<T> dataLayer = new DataLayer<T>(data.Data);
             IExecuteLayer<T> executeLayer = new ExecuteLayer<T>();
 
             return new Skill<T>(baseLayer, infoLayer, conditionLayer, mechanismLayer, dataLayer, executeLayer);

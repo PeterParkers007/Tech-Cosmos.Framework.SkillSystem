@@ -1,6 +1,6 @@
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public class PassiveBaseLayer<T> : BaseLayer<T> where T : IUnit<T>
+    public class PassiveBaseLayer<T> : BaseLayer<T> where T : class, IUnit<T>
     {
         public PassiveBaseLayer(string triggerEvent) : base(triggerEvent) { }
 
