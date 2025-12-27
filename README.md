@@ -167,7 +167,6 @@ unitEvent.Trigger("OnAttack", skillContext);
 - `SkillManager<T>`: 技能创建工厂
 - `SkillHolder<T>`: 技能持有者管理
 - `UnitEvent<T>`: 单位事件系统
-- `SkillSystemConfig`: 系统全局配置
 
 ## 贡献
 
