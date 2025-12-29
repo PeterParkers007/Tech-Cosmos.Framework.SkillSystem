@@ -7,7 +7,7 @@ namespace TechCosmos.SkillSystem.Runtime
         private Dictionary<string, object> _data = new();
         public ISkill<T> Skill { get; set; }
         public DataLayer(Dictionary<string, object> data) => _data = data;
-        public TValue GetValue<TValue>(string key)
+        public TValue GetValue<TValue>(string key, SkillContext<T> context)
         {
             if (!_data.ContainsKey(key))
                 return default(TValue);
