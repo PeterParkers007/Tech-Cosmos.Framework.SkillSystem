@@ -93,7 +93,7 @@ var skillData = new SkillData<GameCharacter>
     }
 };
 
-var skill = SkillManager<GameCharacter>.CreateSkill(skillData);
+var skill = SkillFactory<GameCharacter>.CreateSkill(skillData);
 GetComponent<GameCharacter>().AddSkill(skill);
 ```
 
@@ -164,7 +164,7 @@ unitEvent.Trigger("OnAttack", skillContext);
 - `SkillContext<T>`: 技能执行上下文
 
 ### 主要类
-- `SkillManager<T>`: 技能创建工厂
+- `SkillFactory<T>`: 技能创建工厂
 - `SkillHolder<T>`: 技能持有者管理
 - `UnitEvent<T>`: 单位事件系统
 
