@@ -8,5 +8,11 @@ namespace TechCosmos.SkillSystem.Runtime
         public T target;
 
         public Vector3 targetPos;
+        public SkillContext(T caster, T target = default, Vector3 targetPos = default)
+        {
+            this.caster = caster;
+            this.target = target;
+            this.targetPos = targetPos;
+        }
     }
 }
