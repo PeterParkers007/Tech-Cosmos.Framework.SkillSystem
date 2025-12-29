@@ -25,6 +25,7 @@ namespace TechCosmos.SkillSystem.Runtime
         public void SetValue<TValue>(string key, TValue value) => Data[key] = value;
         public void SetFormula<TValue>(string key, Func<SkillContext<T>, TValue> formula)
             => Data[key] = formula;
+        public TValue GetValue<TValue>(string key) => (TValue)Data[key];
         public void AddMechanism(Action<SkillContext<T>> mechanism) => FuncMechanisms.Add(mechanism);
         public void AddMechanism(Mechanism<T> mechanism) => Mechanisms.Add(mechanism);
         public void AddMechanism(params Action<SkillContext<T>>[] mechanisms) => FuncMechanisms.AddRange(mechanisms);
