@@ -3,7 +3,7 @@ namespace TechCosmos.SkillSystem.Runtime
 {
     public class SkillHolder<T> where T : class, IUnit<T>
     {
-        private List<ISkill<T>> skillList = new();
+        private Dictionary<string, ISkill<T>> skills = new();
         private UnitEvent<T> unitEvent;
 
         public SkillHolder(UnitEvent<T> unitEvent) => this.unitEvent = unitEvent;
@@ -11,13 +11,13 @@ namespace TechCosmos.SkillSystem.Runtime
         public void AddSkill(ISkill<T> skill)
         {
             unitEvent.Subscribe(skill.BaseLayer.TriggerEvent, skill.BaseLayer.Trigger);
-            skillList.Add(skill);
+            skills[skill.InformationLayer.Name] = skill;
         }
 
         public void RemoveSkill(ISkill<T> skill)
         {
             unitEvent.Unsubscribe(skill.BaseLayer.TriggerEvent, skill.BaseLayer.Trigger);
-            skillList.Remove(skill);
+            if(skills.ContainsKey(skill.InformationLayer.Name)) skills.Remove(skill.InformationLayer.Name);
         }
     }
 }
