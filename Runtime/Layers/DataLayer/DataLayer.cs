@@ -12,7 +12,7 @@ namespace TechCosmos.SkillSystem.Runtime
         {
             if (!_data.ContainsKey(key))
             {
-                Debug.LogError($"技能[{Skill.InformationLayer.Name}]未找到{key}数据,确保在SkillData编辑环节是否SetFormula或者SetValue{key}.");
+                Debug.LogError($"技能[{Skill.InformationLayer.Name}]未找到[{key}]数据,确保在SkillData编辑环节是否SetFormula或者SetValue[{key}].");
                 return default(TValue);
             }
                 
