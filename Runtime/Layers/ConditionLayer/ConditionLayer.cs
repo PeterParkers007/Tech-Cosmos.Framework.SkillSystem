@@ -13,7 +13,7 @@ namespace TechCosmos.SkillSystem.Runtime
 
             for (int i = 0; i < count; i++)
             {
-                if (!conditions[i].IsEligible(skillContext))
+                if (!conditions[i].IsEligible(skillContext,Skill.DataLayer))
                     return false;
             }
             return true;

@@ -21,7 +21,7 @@ namespace TechCosmos.SkillSystem.Runtime
             int mechanismsCount = mechanisms.Count;
 
             for (int i = 0; i < mechanismsCount; i++)
-                mechanisms[i].Execute(skillContext);
+                mechanisms[i].Execute(skillContext,Skill.DataLayer);
         }
 
         public MechanismLayer(List<Mechanism<T>> mechanisms = null,List<Action<SkillContext<T>>> actions = null)
