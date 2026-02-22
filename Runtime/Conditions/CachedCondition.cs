@@ -11,12 +11,12 @@ namespace TechCosmos.SkillSystem.Runtime
 
         public CachedCondition(Condition<T> inner) => _inner = inner;
 
-        public override bool IsEligible(SkillContext<T> ctx)
+        public override bool IsEligible(SkillContext<T> ctx, IDataLayer<T> dataLayer)
         {
             if (_hasCache && ContextEquals(_lastContext,ctx))
                 return _lastResult;
 
-            _lastResult = _inner.IsEligible(ctx);
+            _lastResult = _inner.IsEligible(ctx,dataLayer);
             _lastContext = ctx;
             _hasCache = true;
             return _lastResult;

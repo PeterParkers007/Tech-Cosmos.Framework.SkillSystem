@@ -12,7 +12,7 @@ namespace TechCosmos.SkillSystem.Runtime
             _conditions = conditions.Where(c => c != null).ToList();
         }
 
-        public override bool IsEligible(SkillContext<T> skillContext)
+        public override bool IsEligible(SkillContext<T> skillContext, IDataLayer<T> dataLayer)
         {
             if (_conditions.Count == 0) return true;
 
@@ -22,7 +22,7 @@ namespace TechCosmos.SkillSystem.Runtime
 
             for (int i = 0; i < count; i++)
             {
-                if (!conditions[i].IsEligible(skillContext))
+                if (!conditions[i].IsEligible(skillContext, dataLayer))
                     return false;
             }
             return true;

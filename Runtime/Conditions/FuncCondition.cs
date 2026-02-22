@@ -11,7 +11,7 @@ namespace TechCosmos.SkillSystem.Runtime
             _func = func ?? throw new ArgumentNullException(nameof(func));
         }
 
-        public override bool IsEligible(SkillContext<T> skillContext)
+        public override bool IsEligible(SkillContext<T> skillContext, IDataLayer<T> dataLayer)
             => _func(skillContext);
     }
 }

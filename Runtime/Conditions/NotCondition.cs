@@ -23,7 +23,7 @@ namespace TechCosmos.SkillSystem.Runtime
             _condition = null; // 或设置为默认值
         }
 
-        public override bool IsEligible(SkillContext<T> skillContext)
-            => !_condition.IsEligible(skillContext);
+        public override bool IsEligible(SkillContext<T> skillContext, IDataLayer<T> dataLayer)
+            => !_condition.IsEligible(skillContext, dataLayer);
     }
 }
