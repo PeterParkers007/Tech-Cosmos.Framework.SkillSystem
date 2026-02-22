@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 namespace TechCosmos.SkillSystem.Runtime
 {
     public class DataLayer<T> : IDataLayer<T> where T : class, IUnit<T>
@@ -10,7 +11,11 @@ namespace TechCosmos.SkillSystem.Runtime
         public TValue GetValue<TValue>(string key, SkillContext<T> context)
         {
             if (!_data.ContainsKey(key))
+            {
+                Debug.LogError($"技能[{Skill.InformationLayer.Name}]未找到{key}数据,确保在SkillData编辑环节是否SetFormula或者SetValue{key}.");
                 return default(TValue);
+            }
+                
 
             var value = _data[key];
 
