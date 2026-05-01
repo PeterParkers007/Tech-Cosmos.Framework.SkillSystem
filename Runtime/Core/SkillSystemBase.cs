@@ -1,11 +1,16 @@
 using System;
-
+using UnityEngine;
 namespace TechCosmos.SkillSystem.Runtime
 {
     /// <summary>
     /// 非泛型上下文基类，仅用于类型匹配的标记
     /// </summary>
-    public class SkillContextBase { }
+    public class SkillContextBase
+    {
+        public object Caster { get; set; }
+        public object Target { get; set; }
+        public Vector3 TargetPos { get; set; }
+    }
 
     /// <summary>
     /// 非泛型数据层基接口

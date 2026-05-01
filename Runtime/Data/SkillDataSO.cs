@@ -237,6 +237,18 @@ namespace TechCosmos.SkillSystem.Runtime
         [SerializeReference]
         public ValueContainer valueContainer;
 
+        // 类型切换按钮（Editor 用）
+        public ValueType currentType = ValueType.Float;
+
+        public enum ValueType
+        {
+            Float,
+            Int,
+            String,
+            Bool,
+            Formula
+        }
+
         public object GetValue() => valueContainer?.GetValue();
     }
 
@@ -272,6 +284,55 @@ namespace TechCosmos.SkillSystem.Runtime
     {
         public bool value;
         public override object GetValue() => value;
+    }
+    [Serializable]
+    public class FormulaValue : ValueContainer
+    {
+        // 公式类型
+        public enum FormulaType
+        {
+            Static,           // 静态值
+            Reference,        // 引用变量
+            Expression,       // 简单表达式
+            Custom            // 自定义公式字符串
+        }
+
+        public FormulaType formulaType = FormulaType.Static;
+
+        // 静态值
+        public float staticValue;
+
+        // 引用变量
+        public string referencePath;       // 如 "caster.Runtime.MaxHealth"
+        public ReferenceType referenceType = ReferenceType.Float;
+
+        // 表达式
+        public float multiplier = 1f;
+        public float offset = 0f;
+        public string operatorType = "Multiply";  // Multiply, Add, Set
+
+        // 自定义公式（用于复杂计算）
+        public string customFormula;       // 如 "caster.Runtime.Attack * 0.5 + 100"
+
+        public enum ReferenceType
+        {
+            Float,
+            Int,
+            Bool,
+            String
+        }
+
+        public override object GetValue()
+        {
+            return this; // 返回自身，运行时解析
+        }
+    }
+
+    [Serializable]
+    public class FormulaContainer : ValueContainer
+    {
+        public string formula;
+        public override object GetValue() => formula;
     }
 
     #endregion

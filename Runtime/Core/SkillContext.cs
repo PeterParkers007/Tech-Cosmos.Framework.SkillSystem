@@ -2,9 +2,6 @@ using UnityEngine;
 
 namespace TechCosmos.SkillSystem.Runtime
 {
-    /// <summary>
-    /// 技能上下文结构体（保持值类型，高性能）
-    /// </summary>
     public struct SkillContext<T> where T : class, IUnit<T>
     {
         public T caster;
@@ -16,6 +13,16 @@ namespace TechCosmos.SkillSystem.Runtime
             this.caster = caster;
             this.target = target;
             this.targetPos = targetPos;
+        }
+
+        public static implicit operator SkillContextBase(SkillContext<T> ctx)
+        {
+            return new SkillContextBase
+            {
+                Caster = ctx.caster,
+                Target = ctx.target,
+                TargetPos = ctx.targetPos
+            };
         }
     }
 }
