@@ -1,33 +1,36 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 namespace TechCosmos.SkillSystem.Runtime
 {
     public class MechanismLayer<T> : IMechanismLayer<T> where T : class, IUnit<T>
     {
-        private List<Mechanism<T>> _mechanisms = new List<Mechanism<T>>();
+        [SerializeReference]
+        private List<MechanismBase> _mechanisms = new();
         private List<Action<SkillContext<T>>> _funcMechanisms = new List<Action<SkillContext<T>>>(6);
         public ISkill<T> Skill { get; set; }
 
         public void Mechanism(SkillContext<T> skillContext)
         {
-            // 优化：局部变量 + for循环
+            // 执行函数式机制
             var funcMechanisms = _funcMechanisms;
             int funcCount = funcMechanisms.Count;
-
             for (int i = 0; i < funcCount; i++)
-                funcMechanisms[i](skillContext);
+                funcMechanisms[i]?.Invoke(skillContext);
 
+            // 执行对象机制 - 直接传递 SkillContext<T>（会自动装箱为 object）
             var mechanisms = _mechanisms;
             int mechanismsCount = mechanisms.Count;
-
             for (int i = 0; i < mechanismsCount; i++)
-                mechanisms[i].Execute(skillContext,Skill.DataLayer);
+            {
+                mechanisms[i]?.ExecuteBase(skillContext, Skill.DataLayer);
+            }
         }
 
-        public MechanismLayer(List<Mechanism<T>> mechanisms = null,List<Action<SkillContext<T>>> actions = null)
+        public MechanismLayer(List<MechanismBase> mechanisms = null, List<Action<SkillContext<T>>> actions = null)
         {
-            if (mechanisms != null) AddMechanism(mechanisms.ToArray());
-            if (actions != null) AddMechanism(actions.ToArray());
+            if (mechanisms != null) _mechanisms.AddRange(mechanisms);
+            if (actions != null) _funcMechanisms.AddRange(actions);
         }
 
         public void AddMechanism(Action<SkillContext<T>> action) => _funcMechanisms.Add(action);

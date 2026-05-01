@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 namespace TechCosmos.SkillSystem.Runtime
 {
     [Serializable]
@@ -18,7 +19,8 @@ namespace TechCosmos.SkillSystem.Runtime
 
         //机制层
         public List<Action<SkillContext<T>>> FuncMechanisms = new();
-        public List<Mechanism<T>> Mechanisms = new();
+        [SerializeReference]
+        public List<MechanismBase> Mechanisms = new();
         //数值层
         public Dictionary<string,object> Data = new();
 
