@@ -217,16 +217,32 @@ namespace TechCosmos.SkillSystem.Editor
             var fieldName = field.Name;
             var category = attr?.Category ?? "基础属性";
 
-            // 判断是否为可拆分类型
+            // 集合类型和复杂类型：跳过拆分，生成整体属性
+            if (IsComplexType(fieldType))
+            {
+                var prop = new GeneratedProperty
+                {
+                    DataKey = fieldName,
+                    PropertyName = $"{char.ToUpper(fieldName[0])}{fieldName.Substring(1)}",
+                    DisplayName = attr?.DisplayName ?? ObjectNames.NicifyVariableName(fieldName),
+                    Category = category,
+                    PropertyType = GetTypeName(fieldType),
+                    GetterCode = $"GetValue<{GetTypeName(fieldType)}>(\"{fieldName}\")",
+                    DefaultValue = GetDefaultValueForType(fieldType, null)
+                };
+                properties.Add(prop);
+                return properties;
+            }
+
+            // 可拆分类型
             if (ShouldFlatten(fieldType))
             {
-                // 拆分结构体/类的字段
                 foreach (var subField in fieldType.GetFields(BindingFlags.Public | BindingFlags.Instance))
                 {
-                    if (subField.IsInitOnly || subField.IsLiteral) continue; // 跳过只读和常量
+                    if (subField.IsInitOnly || subField.IsLiteral) continue;
 
                     var subAttr = subField.GetCustomAttribute<SkillDataFieldAttribute>();
-                    var prop = new GeneratedProperty
+                    var subProp = new GeneratedProperty
                     {
                         DataKey = $"{fieldName}.{subField.Name}",
                         PropertyName = $"{char.ToUpper(fieldName[0])}{fieldName.Substring(1)}{char.ToUpper(subField.Name[0])}{subField.Name.Substring(1)}",
@@ -237,12 +253,12 @@ namespace TechCosmos.SkillSystem.Editor
                         DefaultValue = GetDefaultValueForType(subField.FieldType,
                             subField.GetValue(Activator.CreateInstance(fieldType)))
                     };
-                    properties.Add(prop);
+                    properties.Add(subProp);
                 }
             }
             else
             {
-                // 基础类型，直接生成属性
+                // 基础类型
                 var prop = new GeneratedProperty
                 {
                     DataKey = fieldName,
@@ -261,6 +277,18 @@ namespace TechCosmos.SkillSystem.Editor
         }
 
         /// <summary>
+        /// 判断是否是复杂类型（集合、Unity对象等）
+        /// </summary>
+        private static bool IsComplexType(Type type)
+        {
+            if (type.IsArray) return true;
+            if (type.IsGenericType) return true;
+            if (typeof(UnityEngine.Object).IsAssignableFrom(type)) return true;
+            if (type.IsAbstract) return true;
+            return false;
+        }
+
+        /// <summary>
         /// 判断是否应该拆分为多个字段
         /// </summary>
         private static bool ShouldFlatten(Type type)
@@ -269,16 +297,25 @@ namespace TechCosmos.SkillSystem.Editor
             if (PrimitiveTypes.Contains(type)) return false;
             if (type.IsEnum) return false;
             if (type.IsArray) return false;
-            if (type.IsGenericType) return false;
+
+            // 泛型集合不拆分
+            if (type.IsGenericType)
+            {
+                var genericDef = type.GetGenericTypeDefinition();
+                if (genericDef == typeof(List<>)) return false;
+                if (genericDef == typeof(Dictionary<,>)) return false;
+                if (genericDef == typeof(HashSet<>)) return false;
+                if (genericDef == typeof(IEnumerable<>)) return false;
+                return false; // 其他泛型也不拆分
+            }
+
             if (typeof(UnityEngine.Object).IsAssignableFrom(type)) return false;
 
             // 自定义结构体/类拆分
             if (type.IsSerializable && !type.IsAbstract)
             {
-                // 检查是否有太多字段（超过5个不拆分，作为整体处理）
                 var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
                 if (fields.Length > 5) return false;
-
                 return true;
             }
 
@@ -316,6 +353,7 @@ namespace TechCosmos.SkillSystem.Editor
         /// </summary>
         private static string GetDefaultValueForType(Type type, object instance)
         {
+            // 基础类型
             if (type == typeof(float)) return $"{instance ?? 0f}f";
             if (type == typeof(int)) return (instance ?? 0).ToString();
             if (type == typeof(string)) return $"\"{instance ?? ""}\"";
@@ -327,6 +365,16 @@ namespace TechCosmos.SkillSystem.Editor
             if (type == typeof(Color)) return $"new Color({((Color)(instance ?? Color.white)).r}f, {((Color)(instance ?? Color.white)).g}f, {((Color)(instance ?? Color.white)).b}f, {((Color)(instance ?? Color.white)).a}f)";
             if (type == typeof(Quaternion)) return "Quaternion.identity";
             if (type.IsEnum) return $"{GetTypeName(type)}.{Enum.GetName(type, instance ?? Activator.CreateInstance(type))}";
+
+            // 泛型类型
+            if (type.IsGenericType)
+            {
+                var genericDef = type.GetGenericTypeDefinition();
+                if (genericDef == typeof(List<>)) return $"new {GetTypeName(type)}()";
+                if (genericDef == typeof(Dictionary<,>)) return $"new {GetTypeName(type)}()";
+                if (genericDef == typeof(HashSet<>)) return $"new {GetTypeName(type)}()";
+                return "null";
+            }
 
             if (instance != null && type.IsValueType)
                 return $"new {GetTypeName(type)}()";
@@ -358,8 +406,12 @@ namespace TechCosmos.SkillSystem.Editor
             return "null";
         }
 
+        /// <summary>
+        /// 获取类型的 C# 名称（支持泛型）
+        /// </summary>
         private static string GetTypeName(Type type)
         {
+            // 基础类型映射
             if (type == typeof(float)) return "float";
             if (type == typeof(int)) return "int";
             if (type == typeof(string)) return "string";
@@ -373,7 +425,33 @@ namespace TechCosmos.SkillSystem.Editor
             if (type == typeof(Vector3Int)) return "Vector3Int";
             if (type == typeof(Color)) return "Color";
             if (type == typeof(Quaternion)) return "Quaternion";
-            if (type.IsEnum) return type.FullName;
+
+            // 处理泛型类型
+            if (type.IsGenericType)
+            {
+                var genericDef = type.GetGenericTypeDefinition();
+                var typeName = genericDef.Name;
+
+                // 去掉泛型参数计数标记
+                int backtickIndex = typeName.IndexOf('`');
+                if (backtickIndex > 0)
+                    typeName = typeName.Substring(0, backtickIndex);
+
+                // 递归获取泛型参数
+                var args = type.GetGenericArguments();
+                var argNames = string.Join(", ", args.Select(a => GetTypeName(a)));
+
+                // 使用完整命名空间（对常见类型简化）
+                if (genericDef == typeof(List<>)) return $"List<{argNames}>";
+                if (genericDef == typeof(Dictionary<,>)) return $"Dictionary<{argNames}>";
+                if (genericDef == typeof(HashSet<>)) return $"HashSet<{argNames}>";
+
+                return $"{typeName}<{argNames}>";
+            }
+
+            // 枚举类型
+            if (type.IsEnum) return type.FullName ?? type.Name;
+
             return type.Name;
         }
 
