@@ -4,6 +4,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using TechCosmos.SkillSystem.Runtime;
+using static UnityEngine.GraphicsBuffer;
 
 namespace TechCosmos.SkillSystem.Editor
 {
@@ -11,17 +12,23 @@ namespace TechCosmos.SkillSystem.Editor
     public class SkillDataSOEditor : UnityEditor.Editor
     {
         private SerializedProperty serializedDataProp;
+
+        // 移除缓存，每次刷新
         private Dictionary<string, List<SerializedProperty>> groupedProperties;
         private List<SerializedProperty> ungroupedProperties;
 
         void OnEnable()
         {
             serializedDataProp = serializedObject.FindProperty("serializedData");
-            CacheGroupedProperties();
         }
 
-        private void CacheGroupedProperties()
+        /// <summary>
+        /// 每次 OnInspectorGUI 时重新收集属性，确保最新
+        /// </summary>
+        private void RefreshProperties()
         {
+            serializedObject.Update();
+
             groupedProperties = new Dictionary<string, List<SerializedProperty>>();
             ungroupedProperties = new List<SerializedProperty>();
 
@@ -83,13 +90,16 @@ namespace TechCosmos.SkillSystem.Editor
 
             int end = tooltip.IndexOf(']');
             if (end > 0 && end < tooltip.Length - 1)
-                return tooltip.Substring(end + 2).Trim(); // 跳过 "] "
+                return tooltip.Substring(end + 2).Trim();
 
             return tooltip;
         }
 
         public override void OnInspectorGUI()
         {
+            // 每次刷新重新收集属性
+            RefreshProperties();
+
             serializedObject.Update();
 
             // 绘制基础属性
@@ -112,7 +122,6 @@ namespace TechCosmos.SkillSystem.Editor
 
             serializedObject.ApplyModifiedProperties();
 
-            // 如果有修改，标记为脏
             if (GUI.changed)
             {
                 EditorUtility.SetDirty(target);
@@ -159,36 +168,53 @@ namespace TechCosmos.SkillSystem.Editor
         {
             if (groupedProperties.Count == 0 && ungroupedProperties.Count == 0)
             {
-                EditorGUILayout.HelpBox("没有自定义属性。请使用 [SkillDataField] 标记字段后重新生成。", MessageType.Info);
+                EditorGUILayout.HelpBox(
+                    "没有自定义属性。\n" +
+                    "请在 Unit 类中使用 [SkillDataField] 标记字段，\n" +
+                    "然后运行 Generator 重新生成。",
+                    MessageType.Info);
                 return;
             }
+
+            EditorGUILayout.LabelField("自定义属性", EditorStyles.boldLabel);
 
             // 绘制分组属性
             foreach (var group in groupedProperties.OrderBy(g => g.Key))
             {
-                EditorGUILayout.LabelField($"── {group.Key} ──", EditorStyles.boldLabel);
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
+                // 分组标题
+                var titleStyle = new GUIStyle(EditorStyles.boldLabel);
+                titleStyle.normal.textColor = new Color(0.4f, 0.7f, 1f);
+                EditorGUILayout.LabelField($"▸ {group.Key}", titleStyle);
+
+                EditorGUI.indentLevel++;
                 foreach (var prop in group.Value)
                 {
                     string displayName = ExtractDisplayName(prop.tooltip) ?? prop.displayName;
                     EditorGUILayout.PropertyField(prop, new GUIContent(displayName));
                 }
+                EditorGUI.indentLevel--;
 
                 EditorGUILayout.EndVertical();
-                EditorGUILayout.Space(3);
+                EditorGUILayout.Space(2);
             }
 
             // 绘制未分组属性
             if (ungroupedProperties.Count > 0)
             {
-                EditorGUILayout.LabelField("── 其他属性 ──", EditorStyles.boldLabel);
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
+                var titleStyle = new GUIStyle(EditorStyles.boldLabel);
+                titleStyle.normal.textColor = new Color(0.7f, 0.7f, 0.7f);
+                EditorGUILayout.LabelField("▸ 其他属性", titleStyle);
+
+                EditorGUI.indentLevel++;
                 foreach (var prop in ungroupedProperties)
                 {
                     EditorGUILayout.PropertyField(prop, true);
                 }
+                EditorGUI.indentLevel--;
 
                 EditorGUILayout.EndVertical();
             }
@@ -207,18 +233,22 @@ namespace TechCosmos.SkillSystem.Editor
                     DrawDataEntry(element, i);
                 }
             }
+            else
+            {
+                EditorGUILayout.HelpBox("数值层未初始化", MessageType.Warning);
+            }
 
             EditorGUILayout.EndVertical();
 
             // 添加按钮
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("+ Float", GUILayout.Height(20)))
+            if (GUILayout.Button("+ Float", GUILayout.Height(22)))
                 AddDataEntry("newFloat", new FloatValue());
-            if (GUILayout.Button("+ Int", GUILayout.Height(20)))
+            if (GUILayout.Button("+ Int", GUILayout.Height(22)))
                 AddDataEntry("newInt", new IntValue());
-            if (GUILayout.Button("+ String", GUILayout.Height(20)))
+            if (GUILayout.Button("+ String", GUILayout.Height(22)))
                 AddDataEntry("newString", new StringValue());
-            if (GUILayout.Button("+ Bool", GUILayout.Height(20)))
+            if (GUILayout.Button("+ Bool", GUILayout.Height(22)))
                 AddDataEntry("newBool", new BoolValue());
             EditorGUILayout.EndHorizontal();
         }
@@ -230,7 +260,7 @@ namespace TechCosmos.SkillSystem.Editor
 
             EditorGUILayout.BeginHorizontal();
 
-            // Key 输入
+            // Key
             EditorGUILayout.LabelField("Key", GUILayout.Width(25));
             keyProp.stringValue = EditorGUILayout.TextField(keyProp.stringValue, GUILayout.Width(100));
 
@@ -242,14 +272,14 @@ namespace TechCosmos.SkillSystem.Editor
                 {
                     string typeLabel = containerProp.managedReferenceValue switch
                     {
-                        FloatValue => "Float",
-                        IntValue => "Int",
-                        StringValue => "Str",
-                        BoolValue => "Bool",
+                        FloatValue => "F",
+                        IntValue => "I",
+                        StringValue => "S",
+                        BoolValue => "B",
                         _ => "?"
                     };
 
-                    EditorGUILayout.LabelField(typeLabel, GUILayout.Width(35));
+                    EditorGUILayout.LabelField(typeLabel, GUILayout.Width(15));
 
                     switch (containerProp.managedReferenceValue)
                     {
@@ -270,14 +300,13 @@ namespace TechCosmos.SkillSystem.Editor
             }
             else
             {
-                // 没有值时，占位
-                EditorGUILayout.LabelField("(未设置)", GUILayout.Width(60));
+                EditorGUILayout.LabelField("(空)", GUILayout.Width(60));
             }
 
-            // 删除按钮
+            // 删除
             var oldColor = GUI.backgroundColor;
             GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
-            if (GUILayout.Button("✕", GUILayout.Width(25)))
+            if (GUILayout.Button("✕", GUILayout.Width(25), GUILayout.Height(16)))
             {
                 serializedDataProp.DeleteArrayElementAtIndex(index);
             }
