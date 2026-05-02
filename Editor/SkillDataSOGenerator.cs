@@ -16,7 +16,6 @@ namespace TechCosmos.SkillSystem.Editor
         private const string GENERATED_FOLDER = "Assets/Generated/SkillDataSO";
         private const string GENERATED_NAMESPACE = "TechCosmos.SkillSystem.Runtime.Generated";
 
-        // 基础类型白名单
         private static readonly HashSet<Type> PrimitiveTypes = new HashSet<Type>
         {
             typeof(int), typeof(float), typeof(double), typeof(long),
@@ -30,13 +29,22 @@ namespace TechCosmos.SkillSystem.Editor
             typeof(Gradient), typeof(GameObject), typeof(Transform)
         };
 
+        private static readonly HashSet<string> SimpleTypeNames = new HashSet<string>
+        {
+            "float", "int", "string", "bool", "double", "long", "char", "byte",
+            "Vector2", "Vector3", "Vector4", "Vector2Int", "Vector3Int",
+            "Color", "Color32", "Quaternion",
+            "Rect", "RectInt", "Bounds", "BoundsInt",
+            "LayerMask", "AnimationCurve", "Gradient",
+            "GameObject", "Transform"
+        };
+
         [MenuItem("Tech-Cosmos/SkillSystem/Generator/Generate All SkillDataSO")]
         public static void GenerateAllSkillDataSO()
         {
             if (!Directory.Exists(GENERATED_FOLDER))
                 Directory.CreateDirectory(GENERATED_FOLDER);
 
-            // 清理旧文件
             foreach (var file in Directory.GetFiles(GENERATED_FOLDER, "*.g.cs"))
                 File.Delete(file);
 
@@ -79,13 +87,11 @@ namespace TechCosmos.SkillSystem.Editor
             var className = attr?.FileName ?? $"{unitTypeName}SkillDataSO";
             var menuName = attr?.MenuName ?? $"Tech-Cosmos/Skill/{unitTypeName}";
 
-            // 收集所有标记字段
             var markedFields = unitType.GetFields(
                 BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
                 .Where(f => f.GetCustomAttribute<SkillDataFieldAttribute>() != null)
                 .ToList();
 
-            // 收集 DataEntry 标记
             var dataEntries = new List<(string key, Type valueType, string defaultValue, string description)>();
             foreach (var field in unitType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
@@ -102,16 +108,15 @@ namespace TechCosmos.SkillSystem.Editor
         }
 
         private static string GenerateClassCode(
-    string unitTypeName,
-    string className,
-    string menuName,
-    List<FieldInfo> markedFields,
-    List<(string key, Type valueType, string defaultValue, string description)> dataEntries)
+            string unitTypeName,
+            string className,
+            string menuName,
+            List<FieldInfo> markedFields,
+            List<(string key, Type valueType, string defaultValue, string description)> dataEntries)
         {
             var sb = new StringBuilder();
             var fieldGroups = new Dictionary<string, List<GeneratedProperty>>();
 
-            // 分析每个字段
             foreach (var field in markedFields)
             {
                 var attr = field.GetCustomAttribute<SkillDataFieldAttribute>();
@@ -159,14 +164,13 @@ namespace TechCosmos.SkillSystem.Editor
             sb.AppendLine("            _initialized = true;");
             sb.AppendLine();
 
-            // 生成属性的初始化（用 SetGeneratedValue，不写入序列化列表）
+            // 简单类型初始化
             foreach (var group in fieldGroups)
             {
                 foreach (var prop in group.Value)
                 {
-                    // 跳过 null 和集合类型
-                    if (prop.DefaultValue == "null" || prop.DefaultValue.Contains("new List"))
-                        continue;
+                    if (prop.IsComplex) continue;
+                    if (prop.DefaultValue == "null") continue;
 
                     sb.AppendLine($"            // {group.Key}: {prop.DisplayName}");
                     sb.AppendLine($"            if (!ContainsKey(\"{prop.DataKey}\"))");
@@ -175,7 +179,7 @@ namespace TechCosmos.SkillSystem.Editor
                 }
             }
 
-            // DataEntry 的初始化（用 SetValue，写入序列化列表，显示在数据层）
+            // DataEntry 初始化
             foreach (var entry in dataEntries)
             {
                 sb.AppendLine($"            // {entry.description ?? entry.key}");
@@ -207,42 +211,52 @@ namespace TechCosmos.SkillSystem.Editor
             }
 
             sb.AppendLine("        #endregion");
-
-            // 类结束
             sb.AppendLine("    }");
             sb.AppendLine("}");
 
             return sb.ToString();
         }
 
-        /// <summary>
-        /// 生成单个属性代码
-        /// </summary>
         private static void GeneratePropertyCode(StringBuilder sb, GeneratedProperty prop)
         {
-            // Tooltip 存分类信息，供 Editor 分组使用
-            sb.AppendLine($"        [Tooltip(\"[{prop.Category}] {prop.DisplayName}\")]");
-            sb.AppendLine($"        public {prop.PropertyType} {prop.PropertyName}");
-            sb.AppendLine("        {");
-            sb.AppendLine($"            get => GetValue<{prop.PropertyType}>(\"{prop.DataKey}\");");
-            // 关键：setter 用 SetGeneratedValue，不写入序列化列表
-            sb.AppendLine($"            set => SetGeneratedValue(\"{prop.DataKey}\", value);");
-            sb.AppendLine("        }");
+            if (prop.IsComplex)
+            {
+                // 复杂类型用序列化字段（不用字典）
+                var fieldName = $"_{char.ToLower(prop.PropertyName[0])}{prop.PropertyName.Substring(1)}";
+                sb.AppendLine($"        [SerializeField]");
+                sb.AppendLine($"        private {prop.PropertyType} {fieldName} = {prop.DefaultValue};");
+                sb.AppendLine();
+                sb.AppendLine($"        [Tooltip(\"[{prop.Category}] {prop.DisplayName}\")]");
+                sb.AppendLine($"        public {prop.PropertyType} {prop.PropertyName}");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            get => {fieldName};");
+                sb.AppendLine($"            set => {fieldName} = value ?? {prop.DefaultValue};");
+                sb.AppendLine("        }");
+            }
+            else
+            {
+                // 简单类型用字典存储
+                sb.AppendLine($"        [Tooltip(\"[{prop.Category}] {prop.DisplayName}\")]");
+                sb.AppendLine($"        public {prop.PropertyType} {prop.PropertyName}");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            get => GetValue<{prop.PropertyType}>(\"{prop.DataKey}\");");
+                sb.AppendLine($"            set => SetGeneratedValue(\"{prop.DataKey}\", value);");
+                sb.AppendLine("        }");
+            }
             sb.AppendLine();
         }
 
-        /// <summary>
-        /// 分析字段，返回生成的属性列表
-        /// </summary>
         private static List<GeneratedProperty> AnalyzeField(FieldInfo field, SkillDataFieldAttribute attr)
         {
             var properties = new List<GeneratedProperty>();
             var fieldType = field.FieldType;
             var fieldName = field.Name;
             var category = attr?.Category ?? "基础属性";
+            var typeName = GetTypeName(fieldType);
+            var isComplex = IsComplexTypeName(typeName) || IsComplexType(fieldType);
 
-            // 复杂类型（集合、泛型等）不拆分
-            if (IsComplexType(fieldType))
+            // 复杂类型不拆分，直接整体
+            if (isComplex || !ShouldFlatten(fieldType))
             {
                 var prop = new GeneratedProperty
                 {
@@ -250,61 +264,51 @@ namespace TechCosmos.SkillSystem.Editor
                     PropertyName = $"{char.ToUpper(fieldName[0])}{fieldName.Substring(1)}",
                     DisplayName = attr?.DisplayName ?? ObjectNames.NicifyVariableName(fieldName),
                     Category = category,
-                    PropertyType = GetTypeName(fieldType),
-                    GetterCode = $"GetValue<{GetTypeName(fieldType)}>(\"{fieldName}\")",
-                    DefaultValue = GetDefaultValueForType(fieldType, null)
+                    PropertyType = typeName,
+                    GetterCode = isComplex ? fieldName : $"GetValue<{typeName}>(\"{fieldName}\")",
+                    DefaultValue = GetDefaultValueForType(fieldType, field.GetValue(Activator.CreateInstance(field.DeclaringType))),
+                    IsComplex = isComplex
                 };
                 properties.Add(prop);
                 return properties;
             }
 
             // 可拆分类型
-            if (ShouldFlatten(fieldType))
+            foreach (var subField in fieldType.GetFields(BindingFlags.Public | BindingFlags.Instance))
             {
-                foreach (var subField in fieldType.GetFields(BindingFlags.Public | BindingFlags.Instance))
-                {
-                    if (subField.IsInitOnly || subField.IsLiteral) continue;
+                if (subField.IsInitOnly || subField.IsLiteral) continue;
 
-                    var subAttr = subField.GetCustomAttribute<SkillDataFieldAttribute>();
-                    var subProp = new GeneratedProperty
-                    {
-                        DataKey = $"{fieldName}.{subField.Name}",
-                        PropertyName = $"{char.ToUpper(fieldName[0])}{fieldName.Substring(1)}{char.ToUpper(subField.Name[0])}{subField.Name.Substring(1)}",
-                        DisplayName = subAttr?.DisplayName ?? ObjectNames.NicifyVariableName(subField.Name),
-                        Category = subAttr?.Category ?? category,
-                        PropertyType = GetTypeName(subField.FieldType),
-                        GetterCode = GenerateGetterCode(subField.FieldType, $"{fieldName}.{subField.Name}"),
-                        DefaultValue = GetDefaultValueForType(subField.FieldType,
-                            subField.GetValue(Activator.CreateInstance(fieldType)))
-                    };
-                    properties.Add(subProp);
-                }
-            }
-            else
-            {
-                // 基础类型
-                var prop = new GeneratedProperty
+                var subAttr = subField.GetCustomAttribute<SkillDataFieldAttribute>();
+                var subTypeName = GetTypeName(subField.FieldType);
+                var subIsComplex = IsComplexTypeName(subTypeName);
+
+                properties.Add(new GeneratedProperty
                 {
-                    DataKey = fieldName,
-                    PropertyName = $"{char.ToUpper(fieldName[0])}{fieldName.Substring(1)}",
-                    DisplayName = attr?.DisplayName ?? ObjectNames.NicifyVariableName(fieldName),
-                    Category = category,
-                    PropertyType = GetTypeName(fieldType),
-                    GetterCode = $"GetValue<{GetTypeName(fieldType)}>(\"{fieldName}\")",
-                    DefaultValue = GetDefaultValueForType(fieldType,
-                        field.GetValue(Activator.CreateInstance(field.DeclaringType)))
-                };
-                properties.Add(prop);
+                    DataKey = $"{fieldName}.{subField.Name}",
+                    PropertyName = $"{char.ToUpper(fieldName[0])}{fieldName.Substring(1)}{char.ToUpper(subField.Name[0])}{subField.Name.Substring(1)}",
+                    DisplayName = subAttr?.DisplayName ?? ObjectNames.NicifyVariableName(subField.Name),
+                    Category = subAttr?.Category ?? category,
+                    PropertyType = subTypeName,
+                    GetterCode = subField.FieldType.IsEnum
+                        ? $"({subTypeName})GetValue<int>(\"{fieldName}.{subField.Name}\")"
+                        : $"GetValue<{subTypeName}>(\"{fieldName}.{subField.Name}\")",
+                    DefaultValue = GetDefaultValueForType(subField.FieldType,
+                        subField.GetValue(Activator.CreateInstance(fieldType))),
+                    IsComplex = subIsComplex
+                });
             }
 
             return properties;
         }
 
-        
+        private static bool IsComplexTypeName(string typeName)
+        {
+            if (typeName.Contains("<")) return true;
+            if (SimpleTypeNames.Contains(typeName)) return false;
+            if (typeName.Contains(".")) return false; // 枚举
+            return true;
+        }
 
-        /// <summary>
-        /// 判断是否是复杂类型（集合、Unity对象等）
-        /// </summary>
         private static bool IsComplexType(Type type)
         {
             if (type.IsArray) return true;
@@ -314,17 +318,12 @@ namespace TechCosmos.SkillSystem.Editor
             return false;
         }
 
-        /// <summary>
-        /// 判断是否应该拆分为多个字段
-        /// </summary>
         private static bool ShouldFlatten(Type type)
         {
-            // 基础类型不拆分
             if (PrimitiveTypes.Contains(type)) return false;
             if (type.IsEnum) return false;
             if (type.IsArray) return false;
 
-            // 泛型集合不拆分
             if (type.IsGenericType)
             {
                 var genericDef = type.GetGenericTypeDefinition();
@@ -332,12 +331,11 @@ namespace TechCosmos.SkillSystem.Editor
                 if (genericDef == typeof(Dictionary<,>)) return false;
                 if (genericDef == typeof(HashSet<>)) return false;
                 if (genericDef == typeof(IEnumerable<>)) return false;
-                return false; // 其他泛型也不拆分
+                return false;
             }
 
             if (typeof(UnityEngine.Object).IsAssignableFrom(type)) return false;
 
-            // 自定义结构体/类拆分
             if (type.IsSerializable && !type.IsAbstract)
             {
                 var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
@@ -348,25 +346,47 @@ namespace TechCosmos.SkillSystem.Editor
             return false;
         }
 
-        
-
-        /// <summary>
-        /// 生成 Getter 代码
-        /// </summary>
-        private static string GenerateGetterCode(Type type, string key)
+        private static string GetTypeName(Type type)
         {
-            if (type.IsEnum)
-                return $"({GetTypeName(type)})GetValue<int>(\"{key}\")";
+            if (type == typeof(float)) return "float";
+            if (type == typeof(int)) return "int";
+            if (type == typeof(string)) return "string";
+            if (type == typeof(bool)) return "bool";
+            if (type == typeof(void)) return "void";
+            if (type == typeof(GameObject)) return "GameObject";
+            if (type == typeof(Transform)) return "Transform";
+            if (type == typeof(Vector2)) return "Vector2";
+            if (type == typeof(Vector3)) return "Vector3";
+            if (type == typeof(Vector2Int)) return "Vector2Int";
+            if (type == typeof(Vector3Int)) return "Vector3Int";
+            if (type == typeof(Color)) return "Color";
+            if (type == typeof(Quaternion)) return "Quaternion";
 
-            return $"GetValue<{GetTypeName(type)}>(\"{key}\")";
+            if (type.IsGenericType)
+            {
+                var genericDef = type.GetGenericTypeDefinition();
+                var typeName = genericDef.Name;
+                int backtickIndex = typeName.IndexOf('`');
+                if (backtickIndex > 0)
+                    typeName = typeName.Substring(0, backtickIndex);
+
+                var args = type.GetGenericArguments();
+                var argNames = string.Join(", ", args.Select(a => GetTypeName(a)));
+
+                if (genericDef == typeof(List<>)) return $"List<{argNames}>";
+                if (genericDef == typeof(Dictionary<,>)) return $"Dictionary<{argNames}>";
+                if (genericDef == typeof(HashSet<>)) return $"HashSet<{argNames}>";
+
+                return $"{typeName}<{argNames}>";
+            }
+
+            if (type.IsEnum) return type.FullName ?? type.Name;
+
+            return type.Name;
         }
 
-        /// <summary>
-        /// 获取类型的默认值字符串
-        /// </summary>
         private static string GetDefaultValueForType(Type type, object instance)
         {
-            // 基础类型
             if (type == typeof(float)) return $"{instance ?? 0f}f";
             if (type == typeof(int)) return (instance ?? 0).ToString();
             if (type == typeof(string)) return $"\"{instance ?? ""}\"";
@@ -379,7 +399,6 @@ namespace TechCosmos.SkillSystem.Editor
             if (type == typeof(Quaternion)) return "Quaternion.identity";
             if (type.IsEnum) return $"{GetTypeName(type)}.{Enum.GetName(type, instance ?? Activator.CreateInstance(type))}";
 
-            // 泛型类型
             if (type.IsGenericType)
             {
                 var genericDef = type.GetGenericTypeDefinition();
@@ -419,58 +438,6 @@ namespace TechCosmos.SkillSystem.Editor
             return "null";
         }
 
-        /// <summary>
-        /// 获取类型的 C# 名称（支持泛型）
-        /// </summary>
-        private static string GetTypeName(Type type)
-        {
-            // 基础类型映射
-            if (type == typeof(float)) return "float";
-            if (type == typeof(int)) return "int";
-            if (type == typeof(string)) return "string";
-            if (type == typeof(bool)) return "bool";
-            if (type == typeof(void)) return "void";
-            if (type == typeof(GameObject)) return "GameObject";
-            if (type == typeof(Transform)) return "Transform";
-            if (type == typeof(Vector2)) return "Vector2";
-            if (type == typeof(Vector3)) return "Vector3";
-            if (type == typeof(Vector2Int)) return "Vector2Int";
-            if (type == typeof(Vector3Int)) return "Vector3Int";
-            if (type == typeof(Color)) return "Color";
-            if (type == typeof(Quaternion)) return "Quaternion";
-
-            // 处理泛型类型
-            if (type.IsGenericType)
-            {
-                var genericDef = type.GetGenericTypeDefinition();
-                var typeName = genericDef.Name;
-
-                // 去掉泛型参数计数标记
-                int backtickIndex = typeName.IndexOf('`');
-                if (backtickIndex > 0)
-                    typeName = typeName.Substring(0, backtickIndex);
-
-                // 递归获取泛型参数
-                var args = type.GetGenericArguments();
-                var argNames = string.Join(", ", args.Select(a => GetTypeName(a)));
-
-                // 使用完整命名空间（对常见类型简化）
-                if (genericDef == typeof(List<>)) return $"List<{argNames}>";
-                if (genericDef == typeof(Dictionary<,>)) return $"Dictionary<{argNames}>";
-                if (genericDef == typeof(HashSet<>)) return $"HashSet<{argNames}>";
-
-                return $"{typeName}<{argNames}>";
-            }
-
-            // 枚举类型
-            if (type.IsEnum) return type.FullName ?? type.Name;
-
-            return type.Name;
-        }
-
-        /// <summary>
-        /// 生成的属性信息
-        /// </summary>
         private class GeneratedProperty
         {
             public string DataKey { get; set; }
@@ -480,6 +447,7 @@ namespace TechCosmos.SkillSystem.Editor
             public string PropertyType { get; set; }
             public string GetterCode { get; set; }
             public string DefaultValue { get; set; }
+            public bool IsComplex { get; set; }
         }
     }
 }

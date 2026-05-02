@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
+
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -28,13 +30,9 @@ namespace TechCosmos.SkillSystem.Runtime
         [SerializeReference]
         public List<MechanismBase> Mechanisms = new();
 
-        // 数值层 - 手动添加的数据（序列化到列表）
+        // 数值层 - 所有数据（手动 + 生成属性）
         [SerializeField]
         private List<DataEntry> serializedData = new();
-
-        // 生成属性专用的不序列化字典
-        [NonSerialized]
-        protected Dictionary<string, object> _generatedValues = new();
 
         // 缓存
         [NonSerialized]
@@ -42,10 +40,7 @@ namespace TechCosmos.SkillSystem.Runtime
 
         #region ISerializationCallbackReceiver
 
-        void ISerializationCallbackReceiver.OnBeforeSerialize()
-        {
-            // 序列化前不需要特殊处理，serializedData 已经是列表形式
-        }
+        void ISerializationCallbackReceiver.OnBeforeSerialize() { }
 
         void ISerializationCallbackReceiver.OnAfterDeserialize()
         {
@@ -54,8 +49,10 @@ namespace TechCosmos.SkillSystem.Runtime
 
         #endregion
 
+        #region 公共方法
+
         /// <summary>
-        /// 获取完整数据字典（序列化数据 + 生成属性数据）
+        /// 获取完整数据字典
         /// </summary>
         public Dictionary<string, object> GetData()
         {
@@ -63,23 +60,13 @@ namespace TechCosmos.SkillSystem.Runtime
             {
                 _dataCache = new Dictionary<string, object>();
 
-                // 1. 加载手动添加的序列化数据
-                foreach (var entry in serializedData)
+                if (serializedData != null)
                 {
-                    if (!string.IsNullOrEmpty(entry.key))
+                    foreach (var entry in serializedData)
                     {
-                        _dataCache[entry.key] = entry.GetValue();
-                    }
-                }
-
-                // 2. 加载生成属性的默认值（不覆盖已有键）
-                if (_generatedValues != null)
-                {
-                    foreach (var kvp in _generatedValues)
-                    {
-                        if (!_dataCache.ContainsKey(kvp.Key))
+                        if (!string.IsNullOrEmpty(entry.key))
                         {
-                            _dataCache[kvp.Key] = kvp.Value;
+                            _dataCache[entry.key] = entry.GetValue();
                         }
                     }
                 }
@@ -105,40 +92,38 @@ namespace TechCosmos.SkillSystem.Runtime
                 {
                     return (T)Convert.ChangeType(value, typeof(T));
                 }
-                catch
-                {
-                    Debug.LogWarning($"无法转换键 [{key}]: {value?.GetType()} -> {typeof(T)}");
-                }
+                catch { }
             }
             return default;
         }
 
         /// <summary>
-        /// 设置值（生成属性用，只更新缓存和 generatedValues，不写序列化列表）
+        /// 设置值（生成属性用）
         /// </summary>
         protected void SetGeneratedValue<T>(string key, T value)
         {
-            if (_generatedValues == null)
-                _generatedValues = new Dictionary<string, object>();
-
-            object storeValue = value is Enum e ? Convert.ToInt32(e) : (object)value;
-            _generatedValues[key] = storeValue;
-
-            // 同步到缓存
-            if (_dataCache != null)
-                _dataCache[key] = storeValue;
+            SetValueInternal(key, value is Enum e ? Convert.ToInt32(e) : (object)value);
         }
 
         /// <summary>
-        /// 手动设置值（写入序列化列表）
+        /// 手动设置值（显示在 Data 字典区域）
         /// </summary>
         public void SetValue<T>(string key, T value)
         {
-            var data = GetData();
-            object storeValue = value is Enum e ? Convert.ToInt32(e) : (object)value;
-            data[key] = storeValue;
+            SetValueInternal(key, value is Enum e ? Convert.ToInt32(e) : (object)value);
+        }
 
-            // 同步到序列化列表
+        /// <summary>
+        /// 内部设值
+        /// </summary>
+        private void SetValueInternal(string key, object storeValue)
+        {
+            if (_dataCache != null)
+                _dataCache[key] = storeValue;
+
+            if (serializedData == null)
+                serializedData = new List<DataEntry>();
+
             var entry = serializedData.Find(e => e.key == key);
             if (entry == null)
             {
@@ -166,6 +151,44 @@ namespace TechCosmos.SkillSystem.Runtime
             return GetData().ContainsKey(key);
         }
 
+        #endregion
+
+        #region Editor 用
+
+        /// <summary>
+        /// 获取序列化数据列表（Editor 用）
+        /// </summary>
+        public List<DataEntry> GetSerializedData() => serializedData;
+
+        /// <summary>
+        /// 获取生成属性的 key 集合（Editor 用于过滤）
+        /// </summary>
+        public HashSet<string> GetGeneratedKeys()
+        {
+            var keys = new HashSet<string>();
+            var soType = GetType();
+            var props = soType.GetProperties(
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Instance)
+                .Where(p => p.CanRead && p.CanWrite);
+
+            foreach (var prop in props)
+            {
+                var tooltip = prop.GetCustomAttributes(typeof(TooltipAttribute), false)
+                    .FirstOrDefault() as TooltipAttribute;
+                if (tooltip != null)
+                {
+                    // 从 Tooltip 无法直接获取 DataKey，直接用属性名
+                    keys.Add(prop.Name);
+                }
+            }
+            return keys;
+        }
+
+        #endregion
+
+        #region 内部方法
+
         private ValueContainer CreateValueContainer(object value)
         {
             if (value == null) return new StringValue { value = "" };
@@ -175,15 +198,16 @@ namespace TechCosmos.SkillSystem.Runtime
             if (value is long l) return new IntValue { value = (int)l };
             if (value is string s) return new StringValue { value = s };
             if (value is bool b) return new BoolValue { value = b };
-            return new StringValue { value = value.ToString() };
+            if (value is FormulaValue formula) return formula;
+
+            // 复杂类型用 ObjectValue
+            return new ObjectValue { value = value };
         }
+
+        #endregion
 
         public abstract object CreateSkill();
         public abstract Type GetUnitType();
-
-#if UNITY_EDITOR
-        public List<DataEntry> GetSerializedData() => serializedData;
-#endif
     }
 
     /// <summary>
@@ -212,10 +236,7 @@ namespace TechCosmos.SkillSystem.Runtime
             return data;
         }
 
-        public override object CreateSkill()
-        {
-            return SkillFactory<T>.CreateSkill(GetSkillData());
-        }
+        public override object CreateSkill() => SkillFactory<T>.CreateSkill(GetSkillData());
 
         public override Type GetUnitType() => typeof(T);
     }
@@ -266,9 +287,18 @@ namespace TechCosmos.SkillSystem.Runtime
     }
 
     [Serializable]
+    public class ObjectValue : ValueContainer
+    {
+        [SerializeReference]
+        public object value;
+        public override object GetValue() => value;
+    }
+
+    [Serializable]
     public class FormulaValue : ValueContainer
     {
         public enum FormulaType { Static, Reference, Expression, Custom }
+
         public FormulaType formulaType = FormulaType.Static;
         public float staticValue;
         public string referencePath;
@@ -276,6 +306,7 @@ namespace TechCosmos.SkillSystem.Runtime
         public float offset;
         public string operatorType = "Multiply";
         public string customFormula;
+
         public override object GetValue() => this;
     }
 
