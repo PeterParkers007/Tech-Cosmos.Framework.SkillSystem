@@ -16,10 +16,19 @@ namespace TechCosmos.SkillSystem.Editor
         private Dictionary<string, bool> foldoutStates = new();
         private SerializedObject serializedObject;
         private SerializedProperty serializedDataProp;
+        private double lastRepaintTime;
+        private const double REPAINT_INTERVAL = 0.05; // 每秒20帧够了
+        // 缓存
+        private HashSet<string> cachedGeneratedKeys;
+        private List<(Type type, DataEntryTypeAttribute attr)> cachedDataEntryTypes;
+        private Dictionary<string, List<PropertyInfo>> cachedPropGroups;
+        private int lastTargetHash;
+        private bool dirty = true;
 
         private static readonly Color HeaderColor = new Color(0.15f, 0.15f, 0.15f);
         private static readonly Color SectionColor = new Color(0.2f, 0.25f, 0.3f);
         private static readonly Color AccentColor = new Color(0.4f, 0.7f, 1f);
+
         void OnEnable()
         {
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
@@ -37,37 +46,34 @@ namespace TechCosmos.SkillSystem.Editor
             AutoSave();
         }
 
+        private void OnBeforeAssemblyReload() => AutoSave();
+
         private void OnAfterAssemblyReload()
         {
-            // 编译完 currentTarget 还在但底层对象变了，重新绑定
-            if (currentTarget != null)
+            // 延迟一帧执行，确保 Unity 完全加载完毕
+            EditorApplication.delayCall += () =>
             {
-                // 重新从 AssetDatabase 加载，确保不是已销毁的对象
-                var path = AssetDatabase.GetAssetPath(currentTarget);
-                if (!string.IsNullOrEmpty(path))
+                if (currentTarget != null)
                 {
-                    var fresh = AssetDatabase.LoadAssetAtPath<SkillDataSO>(path);
-                    if (fresh != null)
-                        SetTarget(fresh);
-                }
-                else
-                {
-                    // 找不到了，清空
+                    var path = AssetDatabase.GetAssetPath(currentTarget);
+                    if (!string.IsNullOrEmpty(path))
+                    {
+                        var fresh = AssetDatabase.LoadAssetAtPath<SkillDataSO>(path);
+                        if (fresh != null)
+                        {
+                            SetTarget(fresh);
+                            return;
+                        }
+                    }
                     SetTarget(null);
                 }
-            }
-            Repaint();
-        }
-
-        private void OnBeforeAssemblyReload()
-        {
-            AutoSave();
+                Repaint();
+            };
         }
 
         private void OnPlayModeChanged(PlayModeStateChange state)
         {
-            if (state == PlayModeStateChange.ExitingEditMode)
-                AutoSave();
+            if (state == PlayModeStateChange.ExitingEditMode) AutoSave();
         }
 
         private void AutoSave()
@@ -76,6 +82,7 @@ namespace TechCosmos.SkillSystem.Editor
             EditorUtility.SetDirty(currentTarget);
             AssetDatabase.SaveAssets();
         }
+
         [MenuItem("Tech-Cosmos/SkillSystem/Skill Editor Window")]
         public static void OpenWindow()
         {
@@ -85,10 +92,7 @@ namespace TechCosmos.SkillSystem.Editor
         }
 
         [MenuItem("Tech-Cosmos/SkillSystem/Open Skill Editor", true)]
-        private static bool OpenWindowValidate()
-        {
-            return Selection.activeObject is SkillDataSO;
-        }
+        private static bool OpenWindowValidate() => Selection.activeObject is SkillDataSO;
 
         [MenuItem("Tech-Cosmos/SkillSystem/Open Skill Editor", priority = 5)]
         public static void OpenFromSelection()
@@ -107,6 +111,7 @@ namespace TechCosmos.SkillSystem.Editor
                 currentTarget = null;
                 serializedObject = null;
                 serializedDataProp = null;
+                ClearCache();
                 Repaint();
                 return;
             }
@@ -115,12 +120,85 @@ namespace TechCosmos.SkillSystem.Editor
             serializedObject = new SerializedObject(target);
             serializedDataProp = serializedObject.FindProperty("serializedData");
             foldoutStates.Clear();
+            ClearCache();
             Repaint();
         }
 
+        void OnSelectionChange()
+        {
+            if (Selection.activeObject is SkillDataSO so && so != null)
+                SetTarget(so);
+            else if (currentTarget == null)
+                Repaint();
+        }
+
+        #region 缓存
+
+        private void ClearCache()
+        {
+            cachedGeneratedKeys = null;
+            cachedDataEntryTypes = null;
+            cachedPropGroups = null;
+            lastTargetHash = 0;
+            dirty = true;
+        }
+
+        private bool NeedsRefresh()
+        {
+            if (currentTarget == null) return true;
+            if (dirty) return true;
+            int hash = currentTarget.GetInstanceID();
+            if (hash != lastTargetHash) return true;
+            if (cachedGeneratedKeys == null) return true;
+            if (cachedPropGroups == null) return true;
+            return false;
+        }
+
+        private void RefreshCacheIfNeeded()
+        {
+            if (!NeedsRefresh()) return;
+
+            lastTargetHash = currentTarget.GetInstanceID();
+            cachedGeneratedKeys = currentTarget.GetGeneratedKeys();
+            cachedDataEntryTypes = CollectDataEntryTypesRaw();
+            cachedPropGroups = BuildPropGroups();
+            dirty = false;
+        }
+
+        private Dictionary<string, List<PropertyInfo>> BuildPropGroups()
+        {
+            var groups = new Dictionary<string, List<PropertyInfo>>();
+            if (currentTarget == null) return groups;
+
+            var soType = currentTarget.GetType();
+            foreach (var prop in soType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!prop.CanRead || !prop.CanWrite) continue;
+
+                var attrs = prop.GetCustomAttributes(typeof(TooltipAttribute), false);
+                if (attrs.Length == 0) continue;
+
+                var tooltipAttr = attrs[0] as TooltipAttribute;
+                var tooltip = tooltipAttr?.tooltip ?? "";
+                var category = ExtractCategory(tooltip);
+                if (string.IsNullOrEmpty(category)) category = "其他";
+
+                if (!groups.ContainsKey(category))
+                    groups[category] = new List<PropertyInfo>();
+                groups[category].Add(prop);
+            }
+            return groups;
+        }
+
+        private HashSet<string> GetGeneratedKeysCached() => cachedGeneratedKeys ?? new HashSet<string>();
+        private Dictionary<string, List<PropertyInfo>> GetPropGroupsCached() => cachedPropGroups ?? new Dictionary<string, List<PropertyInfo>>();
+        private List<(Type, DataEntryTypeAttribute)> GetDataEntryTypesCached() => cachedDataEntryTypes ?? new List<(Type, DataEntryTypeAttribute)>();
+
+        #endregion
+
         void OnGUI()
         {
-            // 先绘制工具栏（不管有没有选中目标）
+
             DrawToolbar();
 
             if (currentTarget == null)
@@ -142,6 +220,7 @@ namespace TechCosmos.SkillSystem.Editor
                 return;
             }
 
+            RefreshCacheIfNeeded();
             serializedObject.Update();
 
             scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
@@ -158,15 +237,10 @@ namespace TechCosmos.SkillSystem.Editor
             serializedObject.ApplyModifiedProperties();
 
             if (GUI.changed)
+            {
+                dirty = true;
                 EditorUtility.SetDirty(currentTarget);
-        }
-
-        void OnSelectionChange()
-        {
-            if (Selection.activeObject is SkillDataSO so && so != null)
-                SetTarget(so);
-            else if (currentTarget == null)
-                Repaint(); // 刷新空白界面
+            }
         }
 
         #region 绘制方法
@@ -178,26 +252,20 @@ namespace TechCosmos.SkillSystem.Editor
             GUILayout.Label("技能编辑器", EditorStyles.boldLabel);
             GUILayout.FlexibleSpace();
 
-            // 快捷选择
             var selectTarget = EditorGUILayout.ObjectField(currentTarget, typeof(SkillDataSO), false, GUILayout.Width(200));
             if (selectTarget != currentTarget && selectTarget is SkillDataSO so)
                 SetTarget(so);
 
-            // 保存按钮
             GUI.backgroundColor = new Color(0.3f, 0.8f, 0.4f);
             if (GUILayout.Button("保存", EditorStyles.toolbarButton, GUILayout.Width(50)))
             {
                 EditorUtility.SetDirty(currentTarget);
                 AssetDatabase.SaveAssets();
-                Debug.Log($"已保存: {currentTarget.name}");
             }
             GUI.backgroundColor = Color.white;
 
-            // 创建新技能
             if (GUILayout.Button("新建", EditorStyles.toolbarButton, GUILayout.Width(40)))
-            {
                 CreateNewSkillAsset();
-            }
 
             EditorGUILayout.EndHorizontal();
         }
@@ -211,14 +279,10 @@ namespace TechCosmos.SkillSystem.Editor
                 return;
             }
 
-            string path = EditorUtility.SaveFilePanelInProject(
-                "创建新技能", $"New{unitType.Name}Skill", "asset", "选择保存位置");
-
+            string path = EditorUtility.SaveFilePanelInProject("创建新技能", $"New{unitType.Name}Skill", "asset", "选择保存位置");
             if (string.IsNullOrEmpty(path)) return;
 
-            // 创建对应类型的 SO
-            var soType = currentTarget.GetType();
-            var newSo = CreateInstance(soType) as SkillDataSO;
+            var newSo = CreateInstance(currentTarget.GetType()) as SkillDataSO;
             if (newSo != null)
             {
                 AssetDatabase.CreateAsset(newSo, path);
@@ -232,33 +296,23 @@ namespace TechCosmos.SkillSystem.Editor
         {
             var rect = EditorGUILayout.BeginHorizontal();
             EditorGUI.DrawRect(rect, HeaderColor);
-
             GUILayout.Space(10);
-            var icon = EditorGUIUtility.IconContent("ScriptableObject Icon");
-            EditorGUILayout.LabelField(icon, GUILayout.Width(30), GUILayout.Height(30));
+            EditorGUILayout.LabelField(EditorGUIUtility.IconContent("ScriptableObject Icon"), GUILayout.Width(30), GUILayout.Height(30));
             EditorGUILayout.LabelField(currentTarget.SkillName, EditorStyles.largeLabel);
             GUILayout.FlexibleSpace();
             EditorGUILayout.LabelField($"({currentTarget.GetType().Name})", EditorStyles.miniLabel);
             GUILayout.Space(10);
-
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.Space(5);
         }
 
-        private void DrawSectionHeader(string title, int fontSize = 13)
+        private void DrawSectionHeader(string title)
         {
-            var style = new GUIStyle(EditorStyles.boldLabel)
-            {
-                fontSize = fontSize,
-                normal = { textColor = AccentColor }
-            };
-
             var rect = EditorGUILayout.BeginHorizontal();
             EditorGUI.DrawRect(rect, SectionColor);
-
+            var style = new GUIStyle(EditorStyles.boldLabel) { normal = { textColor = AccentColor } };
             EditorGUILayout.LabelField(title, style);
             EditorGUILayout.EndHorizontal();
-
             var lineRect = EditorGUILayout.GetControlRect(false, 1);
             EditorGUI.DrawRect(lineRect, AccentColor);
         }
@@ -267,52 +321,31 @@ namespace TechCosmos.SkillSystem.Editor
         {
             DrawSectionHeader("基础信息");
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillType"), new GUIContent("技能类型"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("TriggerEvent"), new GUIContent("触发事件"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillName"), new GUIContent("技能名称"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillDescription"), new GUIContent("技能描述"));
-
             EditorGUILayout.EndVertical();
         }
 
         private void DrawConditions()
         {
             DrawSectionHeader("条件层");
-            var prop = serializedObject.FindProperty("Conditions");
-            EditorGUILayout.PropertyField(prop, new GUIContent("条件列表"), true);
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("Conditions"), new GUIContent("条件列表"), true);
         }
 
         private void DrawMechanisms()
         {
             DrawSectionHeader("机制层");
-            var prop = serializedObject.FindProperty("Mechanisms");
-            EditorGUILayout.PropertyField(prop, new GUIContent("机制列表"), true);
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("Mechanisms"), new GUIContent("机制列表"), true);
         }
 
         private void DrawCustomProperties()
         {
-            var soType = currentTarget.GetType();
-            var props = soType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.CanRead && p.CanWrite)
-                .Where(p => p.GetCustomAttributes(typeof(TooltipAttribute), false).Length > 0)
-                .ToList();
-
-            if (props.Count == 0) return;
+            var groups = GetPropGroupsCached();
+            if (groups.Count == 0) return;
 
             DrawSectionHeader("自定义属性");
-
-            // 按分类分组
-            var groups = new Dictionary<string, List<PropertyInfo>>();
-            foreach (var prop in props)
-            {
-                var tooltipAttr = prop.GetCustomAttributes(typeof(TooltipAttribute), false).FirstOrDefault() as TooltipAttribute;
-                var tooltip = tooltipAttr?.tooltip ?? "";
-                var category = ExtractCategory(tooltip);
-                if (string.IsNullOrEmpty(category)) category = "其他";
-                if (!groups.ContainsKey(category)) groups[category] = new List<PropertyInfo>();
-                groups[category].Add(prop);
-            }
 
             foreach (var group in groups.OrderBy(g => g.Key))
             {
@@ -326,7 +359,8 @@ namespace TechCosmos.SkillSystem.Editor
                     EditorGUI.indentLevel++;
                     foreach (var prop in group.Value)
                     {
-                        var tooltipAttr = prop.GetCustomAttributes(typeof(TooltipAttribute), false).FirstOrDefault() as TooltipAttribute;
+                        var attrs = prop.GetCustomAttributes(typeof(TooltipAttribute), false);
+                        var tooltipAttr = attrs.Length > 0 ? attrs[0] as TooltipAttribute : null;
                         var displayName = ExtractDisplayName(tooltipAttr?.tooltip ?? "") ?? ObjectNames.NicifyVariableName(prop.Name);
 
                         try
@@ -336,7 +370,7 @@ namespace TechCosmos.SkillSystem.Editor
                             if (!Equals(value, newValue))
                             {
                                 prop.SetValue(currentTarget, newValue);
-                                EditorUtility.SetDirty(currentTarget);
+                                dirty = true;
                             }
                         }
                         catch (Exception e)
@@ -346,7 +380,6 @@ namespace TechCosmos.SkillSystem.Editor
                     }
                     EditorGUI.indentLevel--;
                 }
-
                 EditorGUILayout.EndVertical();
             }
         }
@@ -356,11 +389,11 @@ namespace TechCosmos.SkillSystem.Editor
             DrawSectionHeader("数值层");
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
+            var generatedKeys = GetGeneratedKeysCached();
+
             if (serializedDataProp != null)
             {
-                var generatedKeys = currentTarget.GetGeneratedKeys();
                 int visibleCount = 0;
-
                 for (int i = 0; i < serializedDataProp.arraySize; i++)
                 {
                     var elem = serializedDataProp.GetArrayElementAtIndex(i);
@@ -370,32 +403,30 @@ namespace TechCosmos.SkillSystem.Editor
                     DrawDataEntry(elem, i);
                     if (i < serializedDataProp.arraySize - 1) EditorGUILayout.Space(2);
                 }
-
                 if (visibleCount == 0)
-                    EditorGUILayout.HelpBox("没有手动添加的数据。使用下方按钮添加。", MessageType.Info);
+                    EditorGUILayout.HelpBox("没有手动添加的数据。", MessageType.Info);
             }
 
             EditorGUILayout.EndVertical();
 
-            // 快速添加
             EditorGUILayout.LabelField("快速添加", EditorStyles.miniLabel);
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Float", GUILayout.Height(24))) AddEntry("newFloat", new FloatValue());
-            if (GUILayout.Button("Int", GUILayout.Height(24))) AddEntry("newInt", new IntValue());
-            if (GUILayout.Button("String", GUILayout.Height(24))) AddEntry("newString", new StringValue());
-            if (GUILayout.Button("Bool", GUILayout.Height(24))) AddEntry("newBool", new BoolValue());
+            if (GUILayout.Button("Float", GUILayout.Height(24))) { AddEntry("newFloat", new FloatValue()); dirty = true; }
+            if (GUILayout.Button("Int", GUILayout.Height(24))) { AddEntry("newInt", new IntValue()); dirty = true; }
+            if (GUILayout.Button("String", GUILayout.Height(24))) { AddEntry("newString", new StringValue()); dirty = true; }
+            if (GUILayout.Button("Bool", GUILayout.Height(24))) { AddEntry("newBool", new BoolValue()); dirty = true; }
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("+ 公式(静态)", GUILayout.Height(24)))
-                AddEntry("formula", new FormulaValue { formulaType = FormulaValue.FormulaType.Static });
+            { AddEntry("formula", new FormulaValue { formulaType = FormulaValue.FormulaType.Static }); dirty = true; }
             if (GUILayout.Button("+ 公式(引用)", GUILayout.Height(24)))
-                AddEntry("ref", new FormulaValue { formulaType = FormulaValue.FormulaType.Reference, multiplier = 1f });
+            { AddEntry("ref", new FormulaValue { formulaType = FormulaValue.FormulaType.Reference, multiplier = 1f }); dirty = true; }
             if (GUILayout.Button("+ 公式(自定义)", GUILayout.Height(24)))
-                AddEntry("custom", new FormulaValue { formulaType = FormulaValue.FormulaType.Custom });
+            { AddEntry("custom", new FormulaValue { formulaType = FormulaValue.FormulaType.Custom }); dirty = true; }
             EditorGUILayout.EndHorizontal();
 
-            var markedTypes = CollectDataEntryTypes();
+            var markedTypes = GetDataEntryTypesCached();
             if (markedTypes.Count > 0)
             {
                 EditorGUILayout.BeginHorizontal();
@@ -404,7 +435,7 @@ namespace TechCosmos.SkillSystem.Editor
                     var dn = item.Item2?.DisplayName ?? item.Item1.Name;
                     if (GUILayout.Button($"+ {dn}", GUILayout.Height(24)))
                     {
-                        try { AddEntry(item.Item1.Name.ToLower(), new SerializableValue { value = Activator.CreateInstance(item.Item1) }); } catch { }
+                        try { AddEntry(item.Item1.Name.ToLower(), new SerializableValue { value = Activator.CreateInstance(item.Item1) }); dirty = true; } catch { }
                     }
                 }
                 EditorGUILayout.EndHorizontal();
@@ -433,30 +464,23 @@ namespace TechCosmos.SkillSystem.Editor
                     nameof(SerializableValue) => GetTypeLabel(containerProp),
                     _ => "Obj"
                 };
-
                 EditorGUILayout.LabelField(typeLabel, EditorStyles.miniLabel, GUILayout.Width(50));
 
                 var valueProp = containerProp.FindPropertyRelative("value");
                 switch (containerProp.managedReferenceValue)
                 {
                     case FloatValue when valueProp != null:
-                        valueProp.floatValue = EditorGUILayout.FloatField(valueProp.floatValue);
-                        break;
+                        valueProp.floatValue = EditorGUILayout.FloatField(valueProp.floatValue); break;
                     case IntValue when valueProp != null:
-                        valueProp.intValue = EditorGUILayout.IntField(valueProp.intValue);
-                        break;
+                        valueProp.intValue = EditorGUILayout.IntField(valueProp.intValue); break;
                     case StringValue when valueProp != null:
-                        valueProp.stringValue = EditorGUILayout.TextField(valueProp.stringValue);
-                        break;
+                        valueProp.stringValue = EditorGUILayout.TextField(valueProp.stringValue); break;
                     case BoolValue when valueProp != null:
-                        valueProp.boolValue = EditorGUILayout.Toggle(valueProp.boolValue);
-                        break;
+                        valueProp.boolValue = EditorGUILayout.Toggle(valueProp.boolValue); break;
                     case FormulaValue:
-                        DrawFormulaInline(containerProp);
-                        break;
+                        DrawFormulaInline(containerProp); break;
                     case SerializableValue when valueProp != null:
-                        EditorGUILayout.PropertyField(valueProp, GUIContent.none, true);
-                        break;
+                        EditorGUILayout.PropertyField(valueProp, GUIContent.none, true); break;
                 }
 
                 if (GUILayout.Button("...", GUILayout.Width(25)))
@@ -467,6 +491,7 @@ namespace TechCosmos.SkillSystem.Editor
             if (GUILayout.Button("✕", GUILayout.Width(25), GUILayout.Height(18)))
             {
                 serializedDataProp.DeleteArrayElementAtIndex(index);
+                dirty = true;
                 GUI.backgroundColor = Color.white;
                 EditorGUILayout.EndHorizontal();
                 EditorGUILayout.EndVertical();
@@ -485,20 +510,16 @@ namespace TechCosmos.SkillSystem.Editor
             var rp = containerProp.FindPropertyRelative("referencePath");
             var cf = containerProp.FindPropertyRelative("customFormula");
 
-            var type = (FormulaValue.FormulaType)ft.enumValueIndex;
-            switch (type)
+            switch ((FormulaValue.FormulaType)ft.enumValueIndex)
             {
                 case FormulaValue.FormulaType.Static:
-                    sv.floatValue = EditorGUILayout.FloatField(sv.floatValue, GUILayout.Width(80));
-                    break;
+                    sv.floatValue = EditorGUILayout.FloatField(sv.floatValue, GUILayout.Width(80)); break;
                 case FormulaValue.FormulaType.Reference:
                 case FormulaValue.FormulaType.Expression:
                     rp.stringValue = EditorGUILayout.TextField(rp.stringValue, GUILayout.Width(120));
-                    sv.floatValue = EditorGUILayout.FloatField(sv.floatValue, GUILayout.Width(50));
-                    break;
+                    sv.floatValue = EditorGUILayout.FloatField(sv.floatValue, GUILayout.Width(50)); break;
                 case FormulaValue.FormulaType.Custom:
-                    cf.stringValue = EditorGUILayout.TextField(cf.stringValue, GUILayout.Width(120));
-                    break;
+                    cf.stringValue = EditorGUILayout.TextField(cf.stringValue, GUILayout.Width(120)); break;
             }
         }
 
@@ -512,7 +533,8 @@ namespace TechCosmos.SkillSystem.Editor
             if (type == typeof(Vector3)) return EditorGUILayout.Vector3Field(label, value != null ? (Vector3)value : Vector3.zero);
             if (type == typeof(Color)) return EditorGUILayout.ColorField(label, value != null ? (Color)value : Color.white);
             if (type.IsEnum) return EditorGUILayout.EnumPopup(label, value as Enum ?? (Enum)Activator.CreateInstance(type));
-            if (typeof(UnityEngine.Object).IsAssignableFrom(type)) return EditorGUILayout.ObjectField(label, value as UnityEngine.Object, type, true);
+            if (typeof(UnityEngine.Object).IsAssignableFrom(type))
+                return EditorGUILayout.ObjectField(label, value as UnityEngine.Object, type, true);
 
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
             {
@@ -522,21 +544,18 @@ namespace TechCosmos.SkillSystem.Editor
                     try { list = Activator.CreateInstance(type) as System.Collections.IList; value = list; }
                     catch { EditorGUILayout.LabelField(label, "null"); return value; }
                 }
-
                 if (!foldoutStates.ContainsKey(label)) foldoutStates[label] = true;
                 foldoutStates[label] = EditorGUILayout.Foldout(foldoutStates[label], $"{label} ({list.Count})");
-
                 if (foldoutStates[label])
                 {
                     EditorGUI.indentLevel++;
+                    var elemType = type.GetGenericArguments()[0];
                     for (int i = 0; i < list.Count; i++)
-                    {
-                        list[i] = DrawField(type.GetGenericArguments()[0], $"元素 [{i}]", list[i]);
-                    }
+                        list[i] = DrawField(elemType, $"元素 [{i}]", list[i]);
                     EditorGUILayout.BeginHorizontal();
                     GUILayout.FlexibleSpace();
                     if (GUILayout.Button("+", GUILayout.Width(25)))
-                        list.Add(type.GetGenericArguments()[0].IsValueType ? Activator.CreateInstance(type.GetGenericArguments()[0]) : null);
+                        list.Add(elemType.IsValueType ? Activator.CreateInstance(elemType) : null);
                     EditorGUILayout.EndHorizontal();
                     EditorGUI.indentLevel--;
                 }
@@ -550,10 +569,8 @@ namespace TechCosmos.SkillSystem.Editor
                     try { value = Activator.CreateInstance(type); }
                     catch { EditorGUILayout.LabelField(label, "null"); return value; }
                 }
-
                 if (!foldoutStates.ContainsKey(label)) foldoutStates[label] = false;
                 foldoutStates[label] = EditorGUILayout.Foldout(foldoutStates[label], $"{label} ({type.Name})");
-
                 if (foldoutStates[label])
                 {
                     EditorGUI.indentLevel++;
@@ -595,7 +612,7 @@ namespace TechCosmos.SkillSystem.Editor
             menu.AddSeparator("");
             menu.AddItem(new GUIContent("Formula"), false, () => SwitchType(cp, new FormulaValue()));
 
-            var marked = CollectDataEntryTypes();
+            var marked = GetDataEntryTypesCached();
             if (marked.Count > 0)
             {
                 menu.AddSeparator("");
@@ -603,10 +620,8 @@ namespace TechCosmos.SkillSystem.Editor
                 {
                     var dn = item.Item2?.DisplayName ?? item.Item1.Name;
                     var ct = item.Item1;
-                    menu.AddItem(new GUIContent($"自定义/{dn}"), false, () =>
-                    {
-                        SwitchType(cp, new SerializableValue { value = Activator.CreateInstance(ct) });
-                    });
+                    menu.AddItem(new GUIContent($"自定义/{dn}"), false,
+                        () => { SwitchType(cp, new SerializableValue { value = Activator.CreateInstance(ct) }); dirty = true; });
                 }
             }
             menu.ShowAsContext();
@@ -616,6 +631,7 @@ namespace TechCosmos.SkillSystem.Editor
         {
             cp.managedReferenceValue = vc;
             cp.serializedObject.ApplyModifiedProperties();
+            dirty = true;
         }
 
         private string GetTypeLabel(SerializedProperty cp)
@@ -641,7 +657,7 @@ namespace TechCosmos.SkillSystem.Editor
             return tooltip;
         }
 
-        private List<(Type type, DataEntryTypeAttribute attr)> CollectDataEntryTypes()
+        private List<(Type type, DataEntryTypeAttribute attr)> CollectDataEntryTypesRaw()
         {
             var r = new List<(Type, DataEntryTypeAttribute)>();
             foreach (var a in System.AppDomain.CurrentDomain.GetAssemblies())
@@ -652,7 +668,7 @@ namespace TechCosmos.SkillSystem.Editor
                     foreach (var t in a.GetExportedTypes())
                     {
                         if (t.IsAbstract || !t.IsSerializable) continue;
-                        if (!t.IsClass && !t.IsValueType) continue;
+                        if (!t.IsClass && !t.IsValueType && !t.IsEnum) continue;
                         var attrs = t.GetCustomAttributes(typeof(DataEntryTypeAttribute), false);
                         if (attrs.Length > 0)
                             r.Add((t, attrs[0] as DataEntryTypeAttribute));
@@ -660,7 +676,9 @@ namespace TechCosmos.SkillSystem.Editor
                 }
                 catch { }
             }
-            r.Sort((a, b) => string.Compare(a.Item2?.DisplayName ?? a.Item1.Name, b.Item2?.DisplayName ?? b.Item1.Name, StringComparison.Ordinal));
+            r.Sort((a, b) => string.Compare(
+                a.Item2?.DisplayName ?? a.Item1.Name,
+                b.Item2?.DisplayName ?? b.Item1.Name, StringComparison.Ordinal));
             return r;
         }
 
