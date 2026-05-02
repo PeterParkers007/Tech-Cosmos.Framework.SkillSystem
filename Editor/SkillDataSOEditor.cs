@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using TechCosmos.SkillSystem.Runtime;
+using System.Reflection;
 
 namespace TechCosmos.SkillSystem.Editor
 {
@@ -12,7 +13,8 @@ namespace TechCosmos.SkillSystem.Editor
     public class SkillDataSOEditor : UnityEditor.Editor
     {
         private SerializedProperty serializedDataProp;
-
+        // 在类顶部添加折叠状态缓存
+        private Dictionary<string, bool> foldoutStates = new Dictionary<string, bool>();
         // 移除缓存，每次刷新
         private Dictionary<string, List<SerializedProperty>> groupedProperties;
         private List<SerializedProperty> ungroupedProperties;
@@ -164,60 +166,145 @@ namespace TechCosmos.SkillSystem.Editor
             }
         }
 
+        
+
+        /// <summary>
+        /// 用反射绘制生成的属性
+        /// </summary>
         private void DrawGroupedProperties()
         {
-            if (groupedProperties.Count == 0 && ungroupedProperties.Count == 0)
+            var soType = target.GetType();
+            var props = soType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanRead && p.CanWrite)
+                .Where(p => p.GetCustomAttribute<TooltipAttribute>() != null)
+                .ToList();
+
+            if (props.Count == 0 && groupedProperties.Count == 0 && ungroupedProperties.Count == 0)
             {
-                EditorGUILayout.HelpBox(
-                    "没有自定义属性。\n" +
-                    "请在 Unit 类中使用 [SkillDataField] 标记字段，\n" +
-                    "然后运行 Generator 重新生成。",
-                    MessageType.Info);
+                EditorGUILayout.HelpBox("没有自定义属性。", MessageType.Info);
                 return;
             }
 
             EditorGUILayout.LabelField("自定义属性", EditorStyles.boldLabel);
 
-            // 绘制分组属性
-            foreach (var group in groupedProperties.OrderBy(g => g.Key))
+            // 按分类分组
+            var reflectedGroups = new Dictionary<string, List<PropertyInfo>>();
+            foreach (var prop in props)
+            {
+                var tooltip = prop.GetCustomAttribute<TooltipAttribute>()?.tooltip ?? "";
+                var category = ExtractCategory(tooltip);
+                if (string.IsNullOrEmpty(category)) category = "其他";
+
+                if (!reflectedGroups.ContainsKey(category))
+                    reflectedGroups[category] = new List<PropertyInfo>();
+                reflectedGroups[category].Add(prop);
+            }
+
+            foreach (var group in reflectedGroups.OrderBy(g => g.Key))
             {
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-                // 分组标题
-                var titleStyle = new GUIStyle(EditorStyles.boldLabel);
-                titleStyle.normal.textColor = new Color(0.4f, 0.7f, 1f);
-                EditorGUILayout.LabelField($"▸ {group.Key}", titleStyle);
+                // 用 Foldout 实现折叠
+                if (!foldoutStates.ContainsKey(group.Key))
+                    foldoutStates[group.Key] = true; // 默认展开
 
-                EditorGUI.indentLevel++;
-                foreach (var prop in group.Value)
+                var titleStyle = new GUIStyle(EditorStyles.foldout);
+                titleStyle.fontStyle = FontStyle.Bold;
+                titleStyle.normal.textColor = new Color(0.4f, 0.7f, 1f);
+
+                foldoutStates[group.Key] = EditorGUILayout.Foldout(
+                    foldoutStates[group.Key],
+                    $"▸ {group.Key}",
+                    true,
+                    titleStyle
+                );
+
+                if (foldoutStates[group.Key])
                 {
-                    string displayName = ExtractDisplayName(prop.tooltip) ?? prop.displayName;
-                    EditorGUILayout.PropertyField(prop, new GUIContent(displayName));
+                    EditorGUI.indentLevel++;
+                    foreach (var prop in group.Value)
+                    {
+                        var tooltip = prop.GetCustomAttribute<TooltipAttribute>()?.tooltip ?? "";
+                        var displayName = ExtractDisplayName(tooltip) ?? ObjectNames.NicifyVariableName(prop.Name);
+
+                        try
+                        {
+                            var value = prop.GetValue(target);
+                            var newValue = DrawPropertyField(prop.PropertyType, displayName, value);
+
+                            if (!Equals(value, newValue))
+                            {
+                                prop.SetValue(target, newValue);
+                                EditorUtility.SetDirty(target);
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            EditorGUILayout.HelpBox($"读取属性失败: {e.Message}", MessageType.Warning);
+                        }
+                    }
+                    EditorGUI.indentLevel--;
                 }
-                EditorGUI.indentLevel--;
 
                 EditorGUILayout.EndVertical();
                 EditorGUILayout.Space(2);
             }
 
-            // 绘制未分组属性
-            if (ungroupedProperties.Count > 0)
+            // 绘制序列化的分组属性（如果有）
+            foreach (var group in groupedProperties.OrderBy(g => g.Key))
             {
+                if (group.Value.Count == 0) continue;
+
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-                var titleStyle = new GUIStyle(EditorStyles.boldLabel);
-                titleStyle.normal.textColor = new Color(0.7f, 0.7f, 0.7f);
-                EditorGUILayout.LabelField("▸ 其他属性", titleStyle);
+                if (!foldoutStates.ContainsKey(group.Key))
+                    foldoutStates[group.Key] = true;
 
-                EditorGUI.indentLevel++;
-                foreach (var prop in ungroupedProperties)
+                foldoutStates[group.Key] = EditorGUILayout.Foldout(
+                    foldoutStates[group.Key],
+                    $"▸ {group.Key}",
+                    true
+                );
+
+                if (foldoutStates[group.Key])
                 {
-                    EditorGUILayout.PropertyField(prop, true);
+                    EditorGUI.indentLevel++;
+                    foreach (var sp in group.Value)
+                    {
+                        EditorGUILayout.PropertyField(sp, true);
+                    }
+                    EditorGUI.indentLevel--;
                 }
-                EditorGUI.indentLevel--;
 
                 EditorGUILayout.EndVertical();
             }
+        }
+
+        /// <summary>
+        /// 根据类型绘制对应的输入字段
+        /// </summary>
+        private object DrawPropertyField(Type type, string label, object value)
+        {
+            if (type == typeof(int))
+                return EditorGUILayout.IntField(label, value != null ? (int)value : 0);
+            if (type == typeof(float))
+                return EditorGUILayout.FloatField(label, value != null ? (float)value : 0f);
+            if (type == typeof(string))
+                return EditorGUILayout.TextField(label, value != null ? (string)value : "");
+            if (type == typeof(bool))
+                return EditorGUILayout.Toggle(label, value != null ? (bool)value : false);
+            if (type.IsEnum)
+                return EditorGUILayout.EnumPopup(label, value as Enum ?? (Enum)Activator.CreateInstance(type));
+            if (type == typeof(Vector2))
+                return EditorGUILayout.Vector2Field(label, value != null ? (Vector2)value : Vector2.zero);
+            if (type == typeof(Vector3))
+                return EditorGUILayout.Vector3Field(label, value != null ? (Vector3)value : Vector3.zero);
+            if (type == typeof(Color))
+                return EditorGUILayout.ColorField(label, value != null ? (Color)value : Color.white);
+
+            // 复杂类型：显示 NotSupported
+            EditorGUILayout.LabelField(label, value?.ToString() ?? "null");
+            return value;
         }
 
         private void DrawDataLayer()
