@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
-using UnityEditor;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace TechCosmos.SkillSystem.Runtime
 {
@@ -18,18 +20,23 @@ namespace TechCosmos.SkillSystem.Runtime
         public string SkillName;
         public string SkillDescription;
 
-        // 条件层 - 支持多态选择
+        // 条件层
         [SerializeReference]
         public List<ConditionBase> Conditions = new();
 
-        // 机制层 - 支持多态选择
+        // 机制层
         [SerializeReference]
         public List<MechanismBase> Mechanisms = new();
 
-        // 数值层
+        // 数值层 - 手动添加的数据（序列化到列表）
         [SerializeField]
         private List<DataEntry> serializedData = new();
 
+        // 生成属性专用的不序列化字典
+        [NonSerialized]
+        protected Dictionary<string, object> _generatedValues = new();
+
+        // 缓存
         [NonSerialized]
         private Dictionary<string, object> _dataCache;
 
@@ -37,44 +44,26 @@ namespace TechCosmos.SkillSystem.Runtime
 
         void ISerializationCallbackReceiver.OnBeforeSerialize()
         {
-            // 序列化前同步缓存到序列化列表
-            if (_dataCache != null)
-            {
-                foreach (var kvp in _dataCache)
-                {
-                    var existing = serializedData.Find(e => e.key == kvp.Key);
-                    if (existing == null)
-                    {
-                        serializedData.Add(new DataEntry
-                        {
-                            key = kvp.Key,
-                            valueContainer = CreateValueContainer(kvp.Value)
-                        });
-                    }
-                    else
-                    {
-                        existing.valueContainer = CreateValueContainer(kvp.Value);
-                    }
-                }
-            }
+            // 序列化前不需要特殊处理，serializedData 已经是列表形式
         }
 
         void ISerializationCallbackReceiver.OnAfterDeserialize()
         {
-            // 反序列化后清空缓存，下次访问时重新构建
             _dataCache = null;
         }
 
         #endregion
 
         /// <summary>
-        /// 获取数值字典
+        /// 获取完整数据字典（序列化数据 + 生成属性数据）
         /// </summary>
         public Dictionary<string, object> GetData()
         {
             if (_dataCache == null)
             {
                 _dataCache = new Dictionary<string, object>();
+
+                // 1. 加载手动添加的序列化数据
                 foreach (var entry in serializedData)
                 {
                     if (!string.IsNullOrEmpty(entry.key))
@@ -82,12 +71,24 @@ namespace TechCosmos.SkillSystem.Runtime
                         _dataCache[entry.key] = entry.GetValue();
                     }
                 }
+
+                // 2. 加载生成属性的默认值（不覆盖已有键）
+                if (_generatedValues != null)
+                {
+                    foreach (var kvp in _generatedValues)
+                    {
+                        if (!_dataCache.ContainsKey(kvp.Key))
+                        {
+                            _dataCache[kvp.Key] = kvp.Value;
+                        }
+                    }
+                }
             }
             return _dataCache;
         }
 
         /// <summary>
-        /// 获取指定类型的值
+        /// 获取值
         /// </summary>
         public T GetValue<T>(string key)
         {
@@ -97,33 +98,44 @@ namespace TechCosmos.SkillSystem.Runtime
                 if (value is T tValue)
                     return tValue;
 
-                // 处理枚举（存储为 int）
                 if (typeof(T).IsEnum && value is int intValue)
                     return (T)(object)intValue;
 
-                // 尝试类型转换
                 try
                 {
                     return (T)Convert.ChangeType(value, typeof(T));
                 }
                 catch
                 {
-                    Debug.LogWarning($"无法将键 [{key}] 的值从 {value?.GetType().Name} 转换为 {typeof(T).Name}");
+                    Debug.LogWarning($"无法转换键 [{key}]: {value?.GetType()} -> {typeof(T)}");
                 }
             }
             return default;
         }
 
         /// <summary>
-        /// 设置数值
+        /// 设置值（生成属性用，只更新缓存和 generatedValues，不写序列化列表）
+        /// </summary>
+        protected void SetGeneratedValue<T>(string key, T value)
+        {
+            if (_generatedValues == null)
+                _generatedValues = new Dictionary<string, object>();
+
+            object storeValue = value is Enum e ? Convert.ToInt32(e) : (object)value;
+            _generatedValues[key] = storeValue;
+
+            // 同步到缓存
+            if (_dataCache != null)
+                _dataCache[key] = storeValue;
+        }
+
+        /// <summary>
+        /// 手动设置值（写入序列化列表）
         /// </summary>
         public void SetValue<T>(string key, T value)
         {
             var data = GetData();
-
-            // 枚举存储为 int
             object storeValue = value is Enum e ? Convert.ToInt32(e) : (object)value;
-
             data[key] = storeValue;
 
             // 同步到序列化列表
@@ -147,14 +159,12 @@ namespace TechCosmos.SkillSystem.Runtime
         }
 
         /// <summary>
-        /// 检查是否包含键
+        /// 检查键是否存在
         /// </summary>
         public bool ContainsKey(string key)
         {
             return GetData().ContainsKey(key);
         }
-
-        #region 数值容器创建
 
         private ValueContainer CreateValueContainer(object value)
         {
@@ -165,27 +175,13 @@ namespace TechCosmos.SkillSystem.Runtime
             if (value is long l) return new IntValue { value = (int)l };
             if (value is string s) return new StringValue { value = s };
             if (value is bool b) return new BoolValue { value = b };
-
-            // 其他类型转为字符串
             return new StringValue { value = value.ToString() };
         }
 
-        #endregion
-
-        /// <summary>
-        /// 创建技能（子类实现）
-        /// </summary>
         public abstract object CreateSkill();
-
-        /// <summary>
-        /// 获取 Unit 类型
-        /// </summary>
         public abstract Type GetUnitType();
 
 #if UNITY_EDITOR
-        /// <summary>
-        /// 编辑器中使用：获取序列化数据（用于 PropertyDrawer）
-        /// </summary>
         public List<DataEntry> GetSerializedData() => serializedData;
 #endif
     }
@@ -207,13 +203,10 @@ namespace TechCosmos.SkillSystem.Runtime
                 Data = GetData()
             };
 
-            // 转换条件
             foreach (var condition in Conditions)
             {
                 if (condition is Condition<T> typedCondition)
-                {
                     data.AddCondition(typedCondition);
-                }
             }
 
             return data;
@@ -233,22 +226,8 @@ namespace TechCosmos.SkillSystem.Runtime
     public class DataEntry
     {
         public string key;
-
         [SerializeReference]
         public ValueContainer valueContainer;
-
-        // 类型切换按钮（Editor 用）
-        public ValueType currentType = ValueType.Float;
-
-        public enum ValueType
-        {
-            Float,
-            Int,
-            String,
-            Bool,
-            Formula
-        }
-
         public object GetValue() => valueContainer?.GetValue();
     }
 
@@ -285,54 +264,19 @@ namespace TechCosmos.SkillSystem.Runtime
         public bool value;
         public override object GetValue() => value;
     }
+
     [Serializable]
     public class FormulaValue : ValueContainer
     {
-        // 公式类型
-        public enum FormulaType
-        {
-            Static,           // 静态值
-            Reference,        // 引用变量
-            Expression,       // 简单表达式
-            Custom            // 自定义公式字符串
-        }
-
+        public enum FormulaType { Static, Reference, Expression, Custom }
         public FormulaType formulaType = FormulaType.Static;
-
-        // 静态值
         public float staticValue;
-
-        // 引用变量
-        public string referencePath;       // 如 "caster.Runtime.MaxHealth"
-        public ReferenceType referenceType = ReferenceType.Float;
-
-        // 表达式
+        public string referencePath;
         public float multiplier = 1f;
-        public float offset = 0f;
-        public string operatorType = "Multiply";  // Multiply, Add, Set
-
-        // 自定义公式（用于复杂计算）
-        public string customFormula;       // 如 "caster.Runtime.Attack * 0.5 + 100"
-
-        public enum ReferenceType
-        {
-            Float,
-            Int,
-            Bool,
-            String
-        }
-
-        public override object GetValue()
-        {
-            return this; // 返回自身，运行时解析
-        }
-    }
-
-    [Serializable]
-    public class FormulaContainer : ValueContainer
-    {
-        public string formula;
-        public override object GetValue() => formula;
+        public float offset;
+        public string operatorType = "Multiply";
+        public string customFormula;
+        public override object GetValue() => this;
     }
 
     #endregion

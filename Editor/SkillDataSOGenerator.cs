@@ -111,6 +111,7 @@ namespace TechCosmos.SkillSystem.Editor
             var sb = new StringBuilder();
             var fieldGroups = new Dictionary<string, List<GeneratedProperty>>();
 
+            // 分析每个字段
             foreach (var field in markedFields)
             {
                 var attr = field.GetCustomAttribute<SkillDataFieldAttribute>();
@@ -135,11 +136,14 @@ namespace TechCosmos.SkillSystem.Editor
             sb.AppendLine();
             sb.AppendLine($"namespace {GENERATED_NAMESPACE}");
             sb.AppendLine("{");
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine($"    /// {unitTypeName} 的技能数据配置");
+            sb.AppendLine("    /// </summary>");
             sb.AppendLine($"    [CreateAssetMenu(fileName = \"New {unitTypeName} Skill\", menuName = \"{menuName}\")]");
             sb.AppendLine($"    public class {className} : TechCosmos.SkillSystem.Runtime.SkillDataSO<{unitTypeName}>");
             sb.AppendLine("    {");
 
-            // 初始化
+            // 初始化区域
             sb.AppendLine("        #region 初始化");
             sb.AppendLine();
             sb.AppendLine("        private bool _initialized = false;");
@@ -155,22 +159,26 @@ namespace TechCosmos.SkillSystem.Editor
             sb.AppendLine("            _initialized = true;");
             sb.AppendLine();
 
+            // 生成属性的初始化（用 SetGeneratedValue，不写入序列化列表）
             foreach (var group in fieldGroups)
             {
                 foreach (var prop in group.Value)
                 {
-                    // 只初始化非 null 默认值
-                    if (prop.DefaultValue != "null" && !prop.DefaultValue.Contains("List<"))
-                    {
-                        sb.AppendLine($"            if (!ContainsKey(\"{prop.DataKey}\"))");
-                        sb.AppendLine($"                SetValue(\"{prop.DataKey}\", {prop.DefaultValue});");
-                        sb.AppendLine();
-                    }
+                    // 跳过 null 和集合类型
+                    if (prop.DefaultValue == "null" || prop.DefaultValue.Contains("new List"))
+                        continue;
+
+                    sb.AppendLine($"            // {group.Key}: {prop.DisplayName}");
+                    sb.AppendLine($"            if (!ContainsKey(\"{prop.DataKey}\"))");
+                    sb.AppendLine($"                SetGeneratedValue(\"{prop.DataKey}\", {prop.DefaultValue});");
+                    sb.AppendLine();
                 }
             }
 
+            // DataEntry 的初始化（用 SetValue，写入序列化列表，显示在数据层）
             foreach (var entry in dataEntries)
             {
+                sb.AppendLine($"            // {entry.description ?? entry.key}");
                 sb.AppendLine($"            if (!ContainsKey(\"{entry.key}\"))");
                 sb.AppendLine($"                SetValue(\"{entry.key}\", {ConvertToDefaultValue(entry.defaultValue, entry.valueType)});");
                 sb.AppendLine();
@@ -180,7 +188,7 @@ namespace TechCosmos.SkillSystem.Editor
             sb.AppendLine("        #endregion");
             sb.AppendLine();
 
-            // 生成属性
+            // 生成属性区域
             sb.AppendLine("        #region 自动生成的属性");
             sb.AppendLine();
 
@@ -199,10 +207,28 @@ namespace TechCosmos.SkillSystem.Editor
             }
 
             sb.AppendLine("        #endregion");
+
+            // 类结束
             sb.AppendLine("    }");
             sb.AppendLine("}");
 
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 生成单个属性代码
+        /// </summary>
+        private static void GeneratePropertyCode(StringBuilder sb, GeneratedProperty prop)
+        {
+            // Tooltip 存分类信息，供 Editor 分组使用
+            sb.AppendLine($"        [Tooltip(\"[{prop.Category}] {prop.DisplayName}\")]");
+            sb.AppendLine($"        public {prop.PropertyType} {prop.PropertyName}");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            get => GetValue<{prop.PropertyType}>(\"{prop.DataKey}\");");
+            // 关键：setter 用 SetGeneratedValue，不写入序列化列表
+            sb.AppendLine($"            set => SetGeneratedValue(\"{prop.DataKey}\", value);");
+            sb.AppendLine("        }");
+            sb.AppendLine();
         }
 
         /// <summary>
@@ -215,7 +241,7 @@ namespace TechCosmos.SkillSystem.Editor
             var fieldName = field.Name;
             var category = attr?.Category ?? "基础属性";
 
-            // 集合类型和复杂类型：跳过拆分，生成整体属性
+            // 复杂类型（集合、泛型等）不拆分
             if (IsComplexType(fieldType))
             {
                 var prop = new GeneratedProperty
@@ -274,6 +300,8 @@ namespace TechCosmos.SkillSystem.Editor
             return properties;
         }
 
+        
+
         /// <summary>
         /// 判断是否是复杂类型（集合、Unity对象等）
         /// </summary>
@@ -320,20 +348,7 @@ namespace TechCosmos.SkillSystem.Editor
             return false;
         }
 
-        /// <summary>
-        /// 生成属性代码
-        /// </summary>
-        private static void GeneratePropertyCode(StringBuilder sb, GeneratedProperty prop)
-        {
-            // 不生成 Header，用 Tooltip 存储分类信息
-            sb.AppendLine($"        [Tooltip(\"[{prop.Category}] {prop.DisplayName}\")]");
-            sb.AppendLine($"        public {prop.PropertyType} {prop.PropertyName}");
-            sb.AppendLine("        {");
-            sb.AppendLine($"            get => {prop.GetterCode};");
-            sb.AppendLine($"            set => SetValue(\"{prop.DataKey}\", value);");
-            sb.AppendLine("        }");
-            sb.AppendLine();
-        }
+        
 
         /// <summary>
         /// 生成 Getter 代码
