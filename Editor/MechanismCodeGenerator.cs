@@ -125,8 +125,8 @@ namespace TechCosmos.SkillSystem.Editor
         }
 
         private static List<(Type type, Type[] targetTypes)> CollectGenericTypes(
-            List<System.Reflection.Assembly> assemblies,
-            Type attributeType)
+    List<System.Reflection.Assembly> assemblies,
+    Type attributeType)
         {
             var result = new List<(Type, Type[])>();
 
@@ -135,7 +135,7 @@ namespace TechCosmos.SkillSystem.Editor
                 try
                 {
                     var types = assembly.GetTypes()
-                        .Where(t => t.IsGenericTypeDefinition)
+                        .Where(t => t.IsGenericTypeDefinition && !t.IsAbstract)  // 跳过抽象泛型类
                         .Where(t => t.GetCustomAttributes(attributeType, false).Any());
 
                     foreach (var type in types)
