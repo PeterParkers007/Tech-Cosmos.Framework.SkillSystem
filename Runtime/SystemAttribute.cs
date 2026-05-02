@@ -3,6 +3,29 @@ using System;
 namespace TechCosmos.SkillSystem.Runtime
 {
     /// <summary>
+    /// 标记可以被添加到数据层字典的自定义类型
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
+    public class DataEntryTypeAttribute : Attribute
+    {
+        /// <summary>
+        /// 在菜单中的显示名称
+        /// </summary>
+        public string DisplayName { get; set; }
+
+        /// <summary>
+        /// 菜单分类
+        /// </summary>
+        public string Category { get; set; }
+
+        public DataEntryTypeAttribute() { }
+
+        public DataEntryTypeAttribute(string displayName)
+        {
+            DisplayName = displayName;
+        }
+    }
+    /// <summary>
     /// 标记需要生成 SkillDataSO 的类
     /// </summary>
     [AttributeUsage(AttributeTargets.Class, Inherited = false)]

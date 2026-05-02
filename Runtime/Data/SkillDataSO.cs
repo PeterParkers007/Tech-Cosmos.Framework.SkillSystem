@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
+using System.Reflection;
+
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -198,10 +200,17 @@ namespace TechCosmos.SkillSystem.Runtime
             if (value is long l) return new IntValue { value = (int)l };
             if (value is string s) return new StringValue { value = s };
             if (value is bool b) return new BoolValue { value = b };
-            if (value is FormulaValue formula) return formula;
+            if (value is FormulaValue fv) return fv;
 
-            // 复杂类型用 ObjectValue
-            return new ObjectValue { value = value };
+            // 检查是否有 [DataEntryType] 标记
+            var type = value.GetType();
+            if (type.GetCustomAttribute<DataEntryTypeAttribute>() != null)
+            {
+                return new SerializableValue { value = value };
+            }
+
+            // 兜底
+            return new StringValue { value = value.ToString() };
         }
 
         #endregion
@@ -309,6 +318,13 @@ namespace TechCosmos.SkillSystem.Runtime
 
         public override object GetValue() => this;
     }
+    [Serializable]
+    public class SerializableValue : ValueContainer
+    {
+        [SerializeReference]
+        public object value;
 
+        public override object GetValue() => value;
+    }
     #endregion
 }

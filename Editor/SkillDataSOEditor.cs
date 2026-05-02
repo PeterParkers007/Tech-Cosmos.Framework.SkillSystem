@@ -6,8 +6,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using TechCosmos.SkillSystem.Runtime;
-using static UnityEngine.GraphicsBuffer;
-
 namespace TechCosmos.SkillSystem.Editor
 {
     [CustomEditor(typeof(SkillDataSO), true)]
@@ -26,7 +24,6 @@ namespace TechCosmos.SkillSystem.Editor
         private void RefreshProperties()
         {
             serializedObject.Update();
-
             groupedProperties = new Dictionary<string, List<SerializedProperty>>();
             ungroupedProperties = new List<SerializedProperty>();
 
@@ -36,7 +33,6 @@ namespace TechCosmos.SkillSystem.Editor
                 do
                 {
                     if (IsSkippedProperty(property.name)) continue;
-
                     string category = ExtractCategory(property.tooltip);
                     if (!string.IsNullOrEmpty(category))
                     {
@@ -54,11 +50,9 @@ namespace TechCosmos.SkillSystem.Editor
 
         private bool IsSkippedProperty(string name)
         {
-            return name == "m_Script" ||
-                   name == "SkillType" || name == "TriggerEvent" ||
+            return name == "m_Script" || name == "SkillType" || name == "TriggerEvent" ||
                    name == "SkillName" || name == "SkillDescription" ||
-                   name == "Conditions" || name == "Mechanisms" ||
-                   name == "serializedData";
+                   name == "Conditions" || name == "Mechanisms" || name == "serializedData";
         }
 
         private string ExtractCategory(string tooltip)
@@ -66,8 +60,7 @@ namespace TechCosmos.SkillSystem.Editor
             if (string.IsNullOrEmpty(tooltip)) return null;
             int start = tooltip.IndexOf('[');
             int end = tooltip.IndexOf(']');
-            if (start == 0 && end > start)
-                return tooltip.Substring(start + 1, end - start - 1);
+            if (start == 0 && end > start) return tooltip.Substring(start + 1, end - start - 1);
             return null;
         }
 
@@ -75,8 +68,7 @@ namespace TechCosmos.SkillSystem.Editor
         {
             if (string.IsNullOrEmpty(tooltip)) return null;
             int end = tooltip.IndexOf(']');
-            if (end > 0 && end < tooltip.Length - 1)
-                return tooltip.Substring(end + 2).Trim();
+            if (end > 0 && end < tooltip.Length - 1) return tooltip.Substring(end + 2).Trim();
             return tooltip;
         }
 
@@ -94,9 +86,7 @@ namespace TechCosmos.SkillSystem.Editor
             DrawDataLayer();
 
             serializedObject.ApplyModifiedProperties();
-
-            if (GUI.changed)
-                EditorUtility.SetDirty(target);
+            if (GUI.changed) EditorUtility.SetDirty(target);
         }
 
         private void DrawBaseProperties()
@@ -114,7 +104,6 @@ namespace TechCosmos.SkillSystem.Editor
         {
             var c = serializedObject.FindProperty("Conditions");
             var m = serializedObject.FindProperty("Mechanisms");
-
             if (c != null)
             {
                 EditorGUILayout.LabelField("条件层 (Conditions)", EditorStyles.boldLabel);
@@ -123,7 +112,6 @@ namespace TechCosmos.SkillSystem.Editor
                 EditorGUILayout.EndVertical();
                 EditorGUILayout.Space(3);
             }
-
             if (m != null)
             {
                 EditorGUILayout.LabelField("机制层 (Mechanisms)", EditorStyles.boldLabel);
@@ -133,9 +121,6 @@ namespace TechCosmos.SkillSystem.Editor
             }
         }
 
-        /// <summary>
-        /// 用反射绘制生成的属性
-        /// </summary>
         private void DrawGroupedProperties()
         {
             var soType = target.GetType();
@@ -153,35 +138,24 @@ namespace TechCosmos.SkillSystem.Editor
             if (props.Count > 0)
             {
                 EditorGUILayout.LabelField("自定义属性", EditorStyles.boldLabel);
-
-                // 按分类分组
                 var reflectedGroups = new Dictionary<string, List<PropertyInfo>>();
                 foreach (var prop in props)
                 {
                     var tooltip = prop.GetCustomAttribute<TooltipAttribute>()?.tooltip ?? "";
                     var category = ExtractCategory(tooltip);
                     if (string.IsNullOrEmpty(category)) category = "其他";
-
-                    if (!reflectedGroups.ContainsKey(category))
-                        reflectedGroups[category] = new List<PropertyInfo>();
+                    if (!reflectedGroups.ContainsKey(category)) reflectedGroups[category] = new List<PropertyInfo>();
                     reflectedGroups[category].Add(prop);
                 }
 
                 foreach (var group in reflectedGroups.OrderBy(g => g.Key))
                 {
                     EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                    if (!foldoutStates.ContainsKey(group.Key)) foldoutStates[group.Key] = true;
 
-                    if (!foldoutStates.ContainsKey(group.Key))
-                        foldoutStates[group.Key] = true;
-
-                    var titleStyle = new GUIStyle(EditorStyles.foldout)
-                    {
-                        fontStyle = FontStyle.Bold,
-                        normal = { textColor = new Color(0.4f, 0.7f, 1f) }
-                    };
-
-                    foldoutStates[group.Key] = EditorGUILayout.Foldout(
-                        foldoutStates[group.Key], $"▸ {group.Key}", true, titleStyle);
+                    var ts = new GUIStyle(EditorStyles.foldout) { fontStyle = FontStyle.Bold };
+                    ts.normal.textColor = new Color(0.4f, 0.7f, 1f);
+                    foldoutStates[group.Key] = EditorGUILayout.Foldout(foldoutStates[group.Key], $"▸ {group.Key}", true, ts);
 
                     if (foldoutStates[group.Key])
                     {
@@ -190,21 +164,14 @@ namespace TechCosmos.SkillSystem.Editor
                         {
                             var tooltip = prop.GetCustomAttribute<TooltipAttribute>()?.tooltip ?? "";
                             var displayName = ExtractDisplayName(tooltip) ?? ObjectNames.NicifyVariableName(prop.Name);
-
                             try
                             {
                                 var value = prop.GetValue(target);
                                 var newValue = DrawPropertyField(prop.PropertyType, displayName, value);
-
-                                // 直接写回，不比较（因为 List 等引用类型修改内部元素后引用不变）
                                 prop.SetValue(target, newValue);
-                                if (GUI.changed)
-                                    EditorUtility.SetDirty(target);
+                                if (GUI.changed) EditorUtility.SetDirty(target);
                             }
-                            catch (Exception e)
-                            {
-                                EditorGUILayout.HelpBox($"读取属性失败: {e.Message}", MessageType.Warning);
-                            }
+                            catch (Exception e) { EditorGUILayout.HelpBox($"错误: {e.Message}", MessageType.Warning); }
                         }
                         EditorGUI.indentLevel--;
                     }
@@ -213,267 +180,88 @@ namespace TechCosmos.SkillSystem.Editor
                 }
             }
 
-            // 绘制序列化的分组属性
             foreach (var group in groupedProperties.OrderBy(g => g.Key))
             {
                 if (group.Value.Count == 0) continue;
-
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
-                if (!foldoutStates.ContainsKey(group.Key))
-                    foldoutStates[group.Key] = true;
-
-                foldoutStates[group.Key] = EditorGUILayout.Foldout(
-                    foldoutStates[group.Key], $"▸ {group.Key}", true);
-
-                if (foldoutStates[group.Key])
-                {
-                    EditorGUI.indentLevel++;
-                    foreach (var sp in group.Value)
-                    {
-                        EditorGUILayout.PropertyField(sp, true);
-                    }
-                    EditorGUI.indentLevel--;
-                }
-
-                EditorGUILayout.EndVertical();
-                EditorGUILayout.Space(2);
-            }
-
-            // 绘制未分组属性
-            if (ungroupedProperties.Count > 0)
-            {
-                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                EditorGUILayout.LabelField("▸ 其他", EditorStyles.boldLabel);
-                EditorGUI.indentLevel++;
-                foreach (var sp in ungroupedProperties)
-                {
-                    EditorGUILayout.PropertyField(sp, true);
-                }
-                EditorGUI.indentLevel--;
+                EditorGUILayout.LabelField($"▸ {group.Key}", EditorStyles.boldLabel);
+                foreach (var sp in group.Value) EditorGUILayout.PropertyField(sp, true);
                 EditorGUILayout.EndVertical();
             }
         }
 
-        /// <summary>
-        /// 根据类型绘制对应的输入字段
-        /// </summary>
         private object DrawPropertyField(Type type, string label, object value)
         {
-            // ===== 基础类型 =====
-            if (type == typeof(int))
-                return EditorGUILayout.IntField(label, value != null ? (int)value : 0);
+            if (type == typeof(int)) return EditorGUILayout.IntField(label, value != null ? (int)value : 0);
+            if (type == typeof(float)) return EditorGUILayout.FloatField(label, value != null ? (float)value : 0f);
+            if (type == typeof(double)) return (double)EditorGUILayout.FloatField(label, value != null ? (float)(double)value : 0f);
+            if (type == typeof(long)) return (long)EditorGUILayout.LongField(label, value != null ? (long)value : 0);
+            if (type == typeof(string)) return EditorGUILayout.TextField(label, value != null ? (string)value : "");
+            if (type == typeof(bool)) return EditorGUILayout.Toggle(label, value != null ? (bool)value : false);
+            if (type == typeof(Vector2)) return EditorGUILayout.Vector2Field(label, value != null ? (Vector2)value : Vector2.zero);
+            if (type == typeof(Vector3)) return EditorGUILayout.Vector3Field(label, value != null ? (Vector3)value : Vector3.zero);
+            if (type == typeof(Vector4)) return EditorGUILayout.Vector4Field(label, value != null ? (Vector4)value : Vector4.zero);
+            if (type == typeof(Vector2Int)) return EditorGUILayout.Vector2IntField(label, value != null ? (Vector2Int)value : Vector2Int.zero);
+            if (type == typeof(Vector3Int)) return EditorGUILayout.Vector3IntField(label, value != null ? (Vector3Int)value : Vector3Int.zero);
+            if (type == typeof(Color)) return EditorGUILayout.ColorField(label, value != null ? (Color)value : Color.white);
+            if (type == typeof(Rect)) return EditorGUILayout.RectField(label, value != null ? (Rect)value : Rect.zero);
+            if (type == typeof(AnimationCurve)) return EditorGUILayout.CurveField(label, value != null ? (AnimationCurve)value : AnimationCurve.Linear(0, 0, 1, 1));
+            if (type == typeof(Gradient)) return EditorGUILayout.GradientField(label, value != null ? (Gradient)value : new Gradient());
+            if (type == typeof(LayerMask)) return EditorGUILayout.LayerField(label, value != null ? (int)(LayerMask)value : 0);
+            if (type.IsEnum) return EditorGUILayout.EnumPopup(label, value as Enum ?? (Enum)Activator.CreateInstance(type));
+            if (typeof(UnityEngine.Object).IsAssignableFrom(type)) return EditorGUILayout.ObjectField(label, value as UnityEngine.Object, type, true);
 
-            if (type == typeof(float))
-                return EditorGUILayout.FloatField(label, value != null ? (float)value : 0f);
-
-            if (type == typeof(double))
-                return (double)EditorGUILayout.FloatField(label, value != null ? (float)(double)value : 0f);
-
-            if (type == typeof(long))
-                return (long)EditorGUILayout.LongField(label, value != null ? (long)value : 0);
-
-            if (type == typeof(string))
-                return EditorGUILayout.TextField(label, value != null ? (string)value : "");
-
-            if (type == typeof(bool))
-                return EditorGUILayout.Toggle(label, value != null ? (bool)value : false);
-
-            // ===== Unity 基础类型 =====
-            if (type == typeof(Vector2))
-                return EditorGUILayout.Vector2Field(label, value != null ? (Vector2)value : Vector2.zero);
-
-            if (type == typeof(Vector3))
-                return EditorGUILayout.Vector3Field(label, value != null ? (Vector3)value : Vector3.zero);
-
-            if (type == typeof(Vector4))
-                return EditorGUILayout.Vector4Field(label, value != null ? (Vector4)value : Vector4.zero);
-
-            if (type == typeof(Vector2Int))
-                return EditorGUILayout.Vector2IntField(label, value != null ? (Vector2Int)value : Vector2Int.zero);
-
-            if (type == typeof(Vector3Int))
-                return EditorGUILayout.Vector3IntField(label, value != null ? (Vector3Int)value : Vector3Int.zero);
-
-            if (type == typeof(Color))
-                return EditorGUILayout.ColorField(label, value != null ? (Color)value : Color.white);
-
-            if (type == typeof(Color32))
-                return (Color32)EditorGUILayout.ColorField(label, value != null ? (Color32)value : new Color32(255, 255, 255, 255));
-
-            if (type == typeof(Rect))
-                return EditorGUILayout.RectField(label, value != null ? (Rect)value : Rect.zero);
-
-            if (type == typeof(RectInt))
-                return EditorGUILayout.RectIntField(label, value != null ? (RectInt)value : new RectInt());
-
-            if (type == typeof(Bounds))
-                return EditorGUILayout.BoundsField(label, value != null ? (Bounds)value : new Bounds());
-
-            if (type == typeof(BoundsInt))
-                return EditorGUILayout.BoundsIntField(label, value != null ? (BoundsInt)value : new BoundsInt());
-
-            if (type == typeof(AnimationCurve))
-                return EditorGUILayout.CurveField(label, value != null ? (AnimationCurve)value : AnimationCurve.Linear(0, 0, 1, 1));
-
-            if (type == typeof(Gradient))
-                return EditorGUILayout.GradientField(label, value != null ? (Gradient)value : new Gradient());
-
-            if (type == typeof(LayerMask))
-                return EditorGUILayout.LayerField(label, value != null ? (int)(LayerMask)value : 0);
-
-            // ===== 枚举 =====
-            if (type.IsEnum)
-            {
-                if (value == null)
-                    value = Activator.CreateInstance(type);
-                return EditorGUILayout.EnumPopup(label, (Enum)value);
-            }
-
-            // ===== UnityEngine.Object 引用 =====
-            if (typeof(UnityEngine.Object).IsAssignableFrom(type))
-                return EditorGUILayout.ObjectField(label, value as UnityEngine.Object, type, true);
-
-            // ===== 泛型 List =====
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
             {
                 var list = value as System.Collections.IList;
-                var elementType = type.GetGenericArguments()[0];
-
-                if (list == null)
-                {
-                    // 尝试创建新实例
-                    try
-                    {
-                        list = Activator.CreateInstance(type) as System.Collections.IList;
-                        value = list;
-                    }
-                    catch
-                    {
-                        EditorGUILayout.LabelField(label, "null (无法创建)");
-                        return value;
-                    }
-                }
-
-                if (!foldoutStates.ContainsKey(label))
-                    foldoutStates[label] = true;
-
+                var elemType = type.GetGenericArguments()[0];
+                if (list == null) { try { list = Activator.CreateInstance(type) as System.Collections.IList; value = list; } catch { EditorGUILayout.LabelField(label, "null"); return value; } }
+                if (!foldoutStates.ContainsKey(label)) foldoutStates[label] = true;
                 foldoutStates[label] = EditorGUILayout.Foldout(foldoutStates[label], $"{label} (Count: {list.Count})");
-
                 if (foldoutStates[label])
                 {
                     EditorGUI.indentLevel++;
-
                     for (int i = 0; i < list.Count; i++)
                     {
                         EditorGUILayout.BeginHorizontal();
-
-                        var newElement = DrawPropertyField(elementType, $"元素 [{i}]", list[i]);
-                        if (!Equals(list[i], newElement))
-                            list[i] = newElement;
-
+                        var ne = DrawPropertyField(elemType, $"元素 [{i}]", list[i]);
+                        if (!Equals(list[i], ne)) list[i] = ne;
                         GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
-                        if (GUILayout.Button("✕", GUILayout.Width(25), GUILayout.Height(16)))
-                        {
-                            list.RemoveAt(i);
-                            GUI.backgroundColor = Color.white;
-                            EditorGUILayout.EndHorizontal();
-                            break;
-                        }
+                        if (GUILayout.Button("✕", GUILayout.Width(25), GUILayout.Height(16))) { list.RemoveAt(i); GUI.backgroundColor = Color.white; EditorGUILayout.EndHorizontal(); break; }
                         GUI.backgroundColor = Color.white;
-
                         EditorGUILayout.EndHorizontal();
                     }
-
-                    // 添加元素按钮
                     EditorGUILayout.BeginHorizontal();
                     GUILayout.FlexibleSpace();
                     if (GUILayout.Button("+ 添加元素", GUILayout.Width(80)))
                     {
-                        try
-                        {
-                            object newItem = null;
-                            if (elementType.IsValueType)
-                                newItem = Activator.CreateInstance(elementType);
-                            else if (elementType == typeof(string))
-                                newItem = "";
-                            list.Add(newItem);
-                        }
-                        catch
-                        {
-                            list.Add(null);
-                        }
+                        try { list.Add(elemType.IsValueType ? Activator.CreateInstance(elemType) : (elemType == typeof(string) ? "" : null)); } catch { list.Add(null); }
                     }
                     EditorGUILayout.EndHorizontal();
-
                     EditorGUI.indentLevel--;
                 }
                 return list;
             }
 
-            // ===== 泛型 Dictionary =====
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
-            {
-                var dict = value as System.Collections.IDictionary;
-                if (dict == null)
-                {
-                    try { value = Activator.CreateInstance(type); dict = value as System.Collections.IDictionary; }
-                    catch { EditorGUILayout.LabelField(label, "null"); return value; }
-                }
-
-                EditorGUILayout.LabelField(label, $"Dictionary (Count: {dict.Count})");
-                EditorGUI.indentLevel++;
-                foreach (System.Collections.DictionaryEntry kvp in dict)
-                {
-                    EditorGUILayout.LabelField("Key", kvp.Key?.ToString() ?? "null");
-                    EditorGUILayout.LabelField("Value", kvp.Value?.ToString() ?? "null");
-                }
-                EditorGUI.indentLevel--;
-                return dict;
-            }
-
-            // ===== 可序列化的自定义类型（结构体/类） =====
             if (type.IsSerializable && !type.IsAbstract && !type.IsPrimitive && type != typeof(string))
             {
-                if (value == null)
-                {
-                    try { value = Activator.CreateInstance(type); }
-                    catch
-                    {
-                        EditorGUILayout.LabelField(label, "null (无法创建实例)");
-                        return null;
-                    }
-                }
-
-                if (!foldoutStates.ContainsKey(label))
-                    foldoutStates[label] = false;
-
+                if (value == null) { try { value = Activator.CreateInstance(type); } catch { EditorGUILayout.LabelField(label, "null"); return value; } }
+                if (!foldoutStates.ContainsKey(label)) foldoutStates[label] = false;
                 foldoutStates[label] = EditorGUILayout.Foldout(foldoutStates[label], $"{label} ({type.Name})");
-
                 if (foldoutStates[label])
                 {
                     EditorGUI.indentLevel++;
-                    var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance)
-                        .Where(f => !f.IsInitOnly && !f.IsLiteral);
-
-                    foreach (var field in fields)
+                    foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.Instance).Where(f => !f.IsInitOnly && !f.IsLiteral))
                     {
-                        var fieldValue = field.GetValue(value);
-                        var newFieldValue = DrawPropertyField(
-                            field.FieldType,
-                            ObjectNames.NicifyVariableName(field.Name),
-                            fieldValue
-                        );
-
-                        if (!Equals(fieldValue, newFieldValue))
-                            field.SetValue(value, newFieldValue);
+                        var fv = f.GetValue(value);
+                        var nfv = DrawPropertyField(f.FieldType, ObjectNames.NicifyVariableName(f.Name), fv);
+                        if (!Equals(fv, nfv)) f.SetValue(value, nfv);
                     }
                     EditorGUI.indentLevel--;
                 }
                 return value;
             }
 
-            // ===== 兜底 =====
             EditorGUILayout.LabelField(label, value?.ToString() ?? "null");
             return value;
         }
@@ -483,81 +271,63 @@ namespace TechCosmos.SkillSystem.Editor
             EditorGUILayout.LabelField("数值层 (Data)", EditorStyles.boldLabel);
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-            // 收集生成属性的 key，用于过滤
-            var generatedKeys = new HashSet<string>();
-            var so = target as SkillDataSO;
-            if (so != null)
-            {
-                var soType = so.GetType();
-                var props = soType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(p => p.CanRead && p.CanWrite)
-                    .Where(p => p.GetCustomAttribute<TooltipAttribute>() != null);
-                foreach (var prop in props)
-                {
-                    // 属性名就是 DataKey（首字母可能大小写不同）
-                    generatedKeys.Add(prop.Name);
-                    generatedKeys.Add(char.ToLower(prop.Name[0]) + prop.Name.Substring(1));
-                    generatedKeys.Add(char.ToUpper(prop.Name[0]) + prop.Name.Substring(1));
-                }
-            }
-
+            var generatedKeys = (target as SkillDataSO)?.GetGeneratedKeys() ?? new HashSet<string>();
             int visibleCount = 0;
 
             if (serializedDataProp != null)
             {
                 for (int i = 0; i < serializedDataProp.arraySize; i++)
                 {
-                    var element = serializedDataProp.GetArrayElementAtIndex(i);
-                    var keyProp = element.FindPropertyRelative("key");
-
-                    // 跳过生成属性的 key
-                    if (generatedKeys.Contains(keyProp.stringValue))
-                        continue;
-
+                    var elem = serializedDataProp.GetArrayElementAtIndex(i);
+                    var key = elem.FindPropertyRelative("key").stringValue;
+                    if (generatedKeys.Contains(key)) continue;
                     visibleCount++;
-                    DrawDataEntry(element, i);
-                    if (i < serializedDataProp.arraySize - 1)
-                        EditorGUILayout.Space(3);
+                    DrawDataEntry(elem, i);
+                    if (i < serializedDataProp.arraySize - 1) EditorGUILayout.Space(3);
                 }
-
-                if (visibleCount == 0)
-                {
-                    EditorGUILayout.HelpBox("数值层为空。使用下方按钮添加数据条目。", MessageType.Info);
-                }
+                if (visibleCount == 0) EditorGUILayout.HelpBox("数值层为空。使用下方按钮添加。", MessageType.Info);
             }
-
             EditorGUILayout.EndVertical();
 
             EditorGUILayout.Space(3);
             EditorGUILayout.LabelField("快速添加", EditorStyles.miniLabel);
+
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Float", GUILayout.Height(22)))
-                AddDataEntry("newFloat", new FloatValue());
-            if (GUILayout.Button("Int", GUILayout.Height(22)))
-                AddDataEntry("newInt", new IntValue());
-            if (GUILayout.Button("String", GUILayout.Height(22)))
-                AddDataEntry("newString", new StringValue());
-            if (GUILayout.Button("Bool", GUILayout.Height(22)))
-                AddDataEntry("newBool", new BoolValue());
+            if (GUILayout.Button("Float", GUILayout.Height(22))) AddDataEntry("newFloat", new FloatValue());
+            if (GUILayout.Button("Int", GUILayout.Height(22))) AddDataEntry("newInt", new IntValue());
+            if (GUILayout.Button("String", GUILayout.Height(22))) AddDataEntry("newString", new StringValue());
+            if (GUILayout.Button("Bool", GUILayout.Height(22))) AddDataEntry("newBool", new BoolValue());
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("+ 公式(静态)", GUILayout.Height(22)))
-                AddDataEntry("formula", new FormulaValue { formulaType = FormulaValue.FormulaType.Static });
-            if (GUILayout.Button("+ 公式(引用)", GUILayout.Height(22)))
-                AddDataEntry("ref", new FormulaValue { formulaType = FormulaValue.FormulaType.Reference, multiplier = 1f });
-            if (GUILayout.Button("+ 公式(自定义)", GUILayout.Height(22)))
-                AddDataEntry("custom", new FormulaValue { formulaType = FormulaValue.FormulaType.Custom });
+            if (GUILayout.Button("+ 公式(静态)", GUILayout.Height(22))) AddDataEntry("formula", new FormulaValue { formulaType = FormulaValue.FormulaType.Static });
+            if (GUILayout.Button("+ 公式(引用)", GUILayout.Height(22))) AddDataEntry("ref", new FormulaValue { formulaType = FormulaValue.FormulaType.Reference, multiplier = 1f });
+            if (GUILayout.Button("+ 公式(自定义)", GUILayout.Height(22))) AddDataEntry("custom", new FormulaValue { formulaType = FormulaValue.FormulaType.Custom });
             EditorGUILayout.EndHorizontal();
+
+            var markedTypes = CollectDataEntryTypes();
+            if (markedTypes.Count > 0)
+            {
+                EditorGUILayout.BeginHorizontal();
+                foreach (var item in markedTypes.Take(4))
+                {
+                    var dn = item.attr?.DisplayName ?? item.type.Name;
+                    if (GUILayout.Button($"+ {dn}", GUILayout.Height(22)))
+                    {
+                        try { AddDataEntry(item.type.Name.ToLower(), new SerializableValue { value = Activator.CreateInstance(item.type) }); } catch { }
+                    }
+                }
+                EditorGUILayout.EndHorizontal();
+            }
         }
 
         private void AddDataEntry(string key, ValueContainer container)
         {
             int index = serializedDataProp.arraySize;
             serializedDataProp.InsertArrayElementAtIndex(index);
-            var element = serializedDataProp.GetArrayElementAtIndex(index);
-            element.FindPropertyRelative("key").stringValue = key;
-            element.FindPropertyRelative("valueContainer").managedReferenceValue = container;
+            var elem = serializedDataProp.GetArrayElementAtIndex(index);
+            elem.FindPropertyRelative("key").stringValue = key;
+            elem.FindPropertyRelative("valueContainer").managedReferenceValue = container;
             serializedObject.ApplyModifiedProperties();
         }
 
@@ -574,31 +344,21 @@ namespace TechCosmos.SkillSystem.Editor
 
             if (containerProp.managedReferenceValue != null)
             {
-                string typeLabel = containerProp.managedReferenceValue.GetType().Name switch
+                string tl = containerProp.managedReferenceValue.GetType().Name switch
                 {
                     nameof(FloatValue) => "Float",
                     nameof(IntValue) => "Int",
                     nameof(StringValue) => "Str",
                     nameof(BoolValue) => "Bool",
                     nameof(FormulaValue) => "Formula",
+                    nameof(SerializableValue) => GetStl(containerProp),
                     _ => "Obj"
                 };
-
                 var c = GUI.color;
-                GUI.color = typeLabel switch
-                {
-                    "Float" => new Color(0.3f, 0.7f, 1f),
-                    "Int" => new Color(0.3f, 1f, 0.5f),
-                    "Str" => new Color(1f, 0.8f, 0.3f),
-                    "Bool" => new Color(1f, 0.5f, 0.5f),
-                    "Formula" => new Color(1f, 0.4f, 1f),
-                    _ => Color.white
-                };
-                EditorGUILayout.LabelField(typeLabel, EditorStyles.miniLabel, GUILayout.Width(50));
+                GUI.color = tl switch { "Float" => new Color(0.3f, 0.7f, 1f), "Int" => new Color(0.3f, 1f, 0.5f), "Str" => new Color(1f, 0.8f, 0.3f), "Bool" => new Color(1f, 0.5f, 0.5f), "Formula" => new Color(1f, 0.4f, 1f), _ => Color.white };
+                EditorGUILayout.LabelField(tl, EditorStyles.miniLabel, GUILayout.Width(50));
                 GUI.color = c;
-
-                if (GUILayout.Button("...", GUILayout.Width(25)))
-                    ShowTypeSwitchMenu(containerProp);
+                if (GUILayout.Button("...", GUILayout.Width(25))) ShowTypeSwitchMenu(containerProp);
             }
 
             GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
@@ -611,7 +371,6 @@ namespace TechCosmos.SkillSystem.Editor
                 return;
             }
             GUI.backgroundColor = Color.white;
-
             EditorGUILayout.EndHorizontal();
 
             if (containerProp.managedReferenceValue != null)
@@ -622,27 +381,24 @@ namespace TechCosmos.SkillSystem.Editor
             EditorGUILayout.EndVertical();
         }
 
+        private string GetStl(SerializedProperty cp)
+        {
+            var vp = cp.FindPropertyRelative("value");
+            return vp?.managedReferenceValue?.GetType().Name ?? "Obj";
+        }
+
         private void DrawValueInput(SerializedProperty containerProp)
         {
             var valueProp = containerProp.FindPropertyRelative("value");
-
             switch (containerProp.managedReferenceValue)
             {
-                case FloatValue:
-                    if (valueProp != null) valueProp.floatValue = EditorGUILayout.FloatField("值", valueProp.floatValue);
-                    break;
-                case IntValue:
-                    if (valueProp != null) valueProp.intValue = EditorGUILayout.IntField("值", valueProp.intValue);
-                    break;
-                case StringValue:
-                    if (valueProp != null) valueProp.stringValue = EditorGUILayout.TextField("值", valueProp.stringValue);
-                    break;
-                case BoolValue:
-                    if (valueProp != null) valueProp.boolValue = EditorGUILayout.Toggle("值", valueProp.boolValue);
-                    break;
-                case FormulaValue:
-                    DrawFormulaInput(containerProp);
-                    break;
+                case FloatValue: if (valueProp != null) valueProp.floatValue = EditorGUILayout.FloatField("值", valueProp.floatValue); break;
+                case IntValue: if (valueProp != null) valueProp.intValue = EditorGUILayout.IntField("值", valueProp.intValue); break;
+                case StringValue: if (valueProp != null) valueProp.stringValue = EditorGUILayout.TextField("值", valueProp.stringValue); break;
+                case BoolValue: if (valueProp != null) valueProp.boolValue = EditorGUILayout.Toggle("值", valueProp.boolValue); break;
+                case FormulaValue: DrawFormulaInput(containerProp); break;
+                case SerializableValue: if (valueProp != null) EditorGUILayout.PropertyField(valueProp, new GUIContent("值"), true); break;
+                default: EditorGUILayout.LabelField("值", containerProp.managedReferenceValue?.GetType().Name ?? "null"); break;
             }
         }
 
@@ -658,35 +414,26 @@ namespace TechCosmos.SkillSystem.Editor
 
             EditorGUI.indentLevel++;
             EditorGUILayout.PropertyField(ft, new GUIContent("公式类型"));
-
-            var type = (FormulaValue.FormulaType)ft.enumValueIndex;
-            switch (type)
+            switch ((FormulaValue.FormulaType)ft.enumValueIndex)
             {
                 case FormulaValue.FormulaType.Static:
-                    sv.floatValue = EditorGUILayout.FloatField("静态值", sv.floatValue);
-                    break;
-
+                    sv.floatValue = EditorGUILayout.FloatField("静态值", sv.floatValue); break;
                 case FormulaValue.FormulaType.Reference:
                     DrawReferenceFieldWithPreview(rp);
-                    EditorGUILayout.BeginHorizontal();
                     var ops = new[] { "Multiply", "Add", "Set" };
                     var opn = new[] { "× 乘", "+ 加", "= 设" };
-                    int oi = Array.IndexOf(ops, op.stringValue);
-                    if (oi < 0) oi = 0;
-                    op.stringValue = ops[EditorGUILayout.Popup("操作符", oi, opn, GUILayout.Width(120))];
+                    int oi = Array.IndexOf(ops, op.stringValue); if (oi < 0) oi = 0;
+                    op.stringValue = ops[EditorGUILayout.Popup("操作符", oi, opn)];
                     mp.floatValue = EditorGUILayout.FloatField("乘数", mp.floatValue);
                     off.floatValue = EditorGUILayout.FloatField("偏移", off.floatValue);
-                    EditorGUILayout.EndHorizontal();
                     break;
-
                 case FormulaValue.FormulaType.Expression:
                     DrawReferenceFieldWithPreview(rp);
                     mp.floatValue = EditorGUILayout.FloatField("乘数", mp.floatValue);
                     off.floatValue = EditorGUILayout.FloatField("偏移", off.floatValue);
                     break;
-
                 case FormulaValue.FormulaType.Custom:
-                    EditorGUILayout.HelpBox("变量: caster, target\n示例: caster.Runtime.Attack * 1.5 + 50", MessageType.Info);
+                    EditorGUILayout.HelpBox("变量: caster, target\n示例: caster.Runtime.Attack * 1.5", MessageType.Info);
                     cf.stringValue = EditorGUILayout.TextField("公式", cf.stringValue);
                     EditorGUILayout.BeginHorizontal();
                     if (GUILayout.Button("caster.", EditorStyles.miniButtonLeft)) cf.stringValue += "caster.";
@@ -704,109 +451,126 @@ namespace TechCosmos.SkillSystem.Editor
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("引用路径", GUILayout.Width(60));
             pathProp.stringValue = EditorGUILayout.TextField(pathProp.stringValue);
-            if (GUILayout.Button("▼", GUILayout.Width(25)))
-                ShowReferencePathMenu(pathProp);
+            if (GUILayout.Button("▼", GUILayout.Width(25))) ShowReferencePathMenu(pathProp);
             EditorGUILayout.EndHorizontal();
         }
 
         private void ShowReferencePathMenu(SerializedProperty pathProp)
         {
             var menu = new GenericMenu();
-            var skillDataSO = target as SkillDataSO;
-            var unitType = skillDataSO?.GetUnitType();
-            var propertyPath = pathProp.propertyPath;
-            var targetObject = pathProp.serializedObject.targetObject;
-
-            if (unitType != null)
+            var so = target as SkillDataSO;
+            var ut = so?.GetUnitType();
+            var pp = pathProp.propertyPath;
+            var to = pathProp.serializedObject.targetObject;
+            if (ut != null)
             {
-                CollectFieldsForMenu(unitType, "caster", menu, propertyPath, targetObject);
+                CollectFieldsForMenu(ut, "caster", menu, pp, to);
                 menu.AddSeparator("");
-                CollectFieldsForMenu(unitType, "target", menu, propertyPath, targetObject);
+                CollectFieldsForMenu(ut, "target", menu, pp, to);
             }
             menu.AddSeparator("");
-            menu.AddItem(new GUIContent("清除路径"), false, () => SetPropertyValue(targetObject, propertyPath, ""));
+            menu.AddItem(new GUIContent("清除路径"), false, () =>
+            {
+                var s = new SerializedObject(to); var sp = s.FindProperty(pp); if (sp != null) { sp.stringValue = ""; s.ApplyModifiedProperties(); }
+            });
             menu.ShowAsContext();
         }
 
-        private void CollectFieldsForMenu(Type unitType, string prefix, GenericMenu menu, string propertyPath, UnityEngine.Object targetObject)
+        private void CollectFieldsForMenu(Type ut, string prefix, GenericMenu menu, string pp, UnityEngine.Object to)
         {
-            var fields = unitType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            bool hasAny = false;
-
-            foreach (var field in fields)
+            bool any = false;
+            foreach (var f in ut.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
-                var attr = field.GetCustomAttribute<SkillDataFieldAttribute>();
-                if (attr == null) continue;
-
-                var displayName = attr.DisplayName ?? ObjectNames.NicifyVariableName(field.Name);
-
-                if (ShouldFlattenInMenu(field.FieldType))
-                {
-                    foreach (var subField in field.FieldType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+                var attr = f.GetCustomAttribute<SkillDataFieldAttribute>(); if (attr == null) continue;
+                var dn = attr.DisplayName ?? ObjectNames.NicifyVariableName(f.Name);
+                if (ShouldFlattenInMenu(f.FieldType))
+                    foreach (var sf in f.FieldType.GetFields(BindingFlags.Public | BindingFlags.Instance))
                     {
-                        hasAny = true;
-                        var fullPath = $"{prefix}.{field.Name}.{subField.Name}";
-                        var display = $"{prefix}/{displayName}/{ObjectNames.NicifyVariableName(subField.Name)}";
-                        var captured = fullPath;
-                        menu.AddItem(new GUIContent(display), false, () => SetPropertyValue(targetObject, propertyPath, captured));
+                        any = true; var cap = $"{prefix}.{f.Name}.{sf.Name}";
+                        menu.AddItem(new GUIContent($"{prefix}/{dn}/{ObjectNames.NicifyVariableName(sf.Name)}"), false, () => { var s = new SerializedObject(to); var sp = s.FindProperty(pp); if (sp != null) { sp.stringValue = cap; s.ApplyModifiedProperties(); } });
                     }
-                }
-                else if (IsSimpleType(field.FieldType))
+                else if (IsSimpleType(f.FieldType))
                 {
-                    hasAny = true;
-                    var fullPath = $"{prefix}.{field.Name}";
-                    var display = $"{prefix}/{displayName}";
-                    var captured = fullPath;
-                    menu.AddItem(new GUIContent(display), false, () => SetPropertyValue(targetObject, propertyPath, captured));
+                    any = true; var cap = $"{prefix}.{f.Name}";
+                    menu.AddItem(new GUIContent($"{prefix}/{dn}"), false, () => { var s = new SerializedObject(to); var sp = s.FindProperty(pp); if (sp != null) { sp.stringValue = cap; s.ApplyModifiedProperties(); } });
                 }
             }
-            if (!hasAny)
-                menu.AddDisabledItem(new GUIContent($"{prefix}/(无可用字段)"));
+            if (!any) menu.AddDisabledItem(new GUIContent($"{prefix}/(无)"));
         }
 
-        private void SetPropertyValue(UnityEngine.Object targetObject, string propertyPath, string value)
-        {
-            var so = new SerializedObject(targetObject);
-            var sp = so.FindProperty(propertyPath);
-            if (sp != null) { sp.stringValue = value; so.ApplyModifiedProperties(); }
-        }
+        private bool ShouldFlattenInMenu(Type t) => !t.IsPrimitive && t != typeof(string) && !t.IsEnum && !t.IsArray && !t.IsGenericType && !typeof(UnityEngine.Object).IsAssignableFrom(t) && t.IsSerializable;
 
-        private bool ShouldFlattenInMenu(Type type)
-        {
-            if (type.IsPrimitive || type == typeof(string) || type.IsEnum || type.IsArray || type.IsGenericType) return false;
-            if (typeof(UnityEngine.Object).IsAssignableFrom(type)) return false;
-            if (type.IsSerializable)
-            {
-                var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
-                return fields.Length > 0 && fields.Length <= 10;
-            }
-            return false;
-        }
-
-        private bool IsSimpleType(Type type)
-        {
-            return type.IsPrimitive || type == typeof(string) || type == typeof(float) || type == typeof(int) || type == typeof(bool) || type == typeof(double) || type.IsEnum || type == typeof(Vector2) || type == typeof(Vector3);
-        }
+        private bool IsSimpleType(Type t) => t.IsPrimitive || t == typeof(string) || t == typeof(float) || t == typeof(int) || t == typeof(bool) || t == typeof(double) || t.IsEnum || t == typeof(Vector2) || t == typeof(Vector3);
 
         private void ShowTypeSwitchMenu(SerializedProperty containerProp)
         {
             var menu = new GenericMenu();
-            menu.AddItem(new GUIContent("Float"), false, () => SwitchValueType(containerProp, new FloatValue()));
-            menu.AddItem(new GUIContent("Int"), false, () => SwitchValueType(containerProp, new IntValue()));
-            menu.AddItem(new GUIContent("String"), false, () => SwitchValueType(containerProp, new StringValue()));
-            menu.AddItem(new GUIContent("Bool"), false, () => SwitchValueType(containerProp, new BoolValue()));
+            menu.AddItem(new GUIContent("Float"), false, () => Switch(containerProp, new FloatValue()));
+            menu.AddItem(new GUIContent("Int"), false, () => Switch(containerProp, new IntValue()));
+            menu.AddItem(new GUIContent("String"), false, () => Switch(containerProp, new StringValue()));
+            menu.AddItem(new GUIContent("Bool"), false, () => Switch(containerProp, new BoolValue()));
             menu.AddSeparator("");
-            menu.AddItem(new GUIContent("Formula/Static"), false, () => SwitchValueType(containerProp, new FormulaValue { formulaType = FormulaValue.FormulaType.Static }));
-            menu.AddItem(new GUIContent("Formula/Reference"), false, () => SwitchValueType(containerProp, new FormulaValue { formulaType = FormulaValue.FormulaType.Reference }));
-            menu.AddItem(new GUIContent("Formula/Expression"), false, () => SwitchValueType(containerProp, new FormulaValue { formulaType = FormulaValue.FormulaType.Expression, multiplier = 1f }));
-            menu.AddItem(new GUIContent("Formula/Custom"), false, () => SwitchValueType(containerProp, new FormulaValue { formulaType = FormulaValue.FormulaType.Custom }));
+            menu.AddItem(new GUIContent("Formula/Static"), false, () => Switch(containerProp, new FormulaValue { formulaType = FormulaValue.FormulaType.Static }));
+            menu.AddItem(new GUIContent("Formula/Reference"), false, () => Switch(containerProp, new FormulaValue { formulaType = FormulaValue.FormulaType.Reference }));
+            menu.AddItem(new GUIContent("Formula/Expression"), false, () => Switch(containerProp, new FormulaValue { formulaType = FormulaValue.FormulaType.Expression, multiplier = 1f }));
+            menu.AddItem(new GUIContent("Formula/Custom"), false, () => Switch(containerProp, new FormulaValue { formulaType = FormulaValue.FormulaType.Custom }));
+
+            var marked = CollectDataEntryTypes();
+            if (marked.Count > 0)
+            {
+                menu.AddSeparator("");
+                menu.AddDisabledItem(new GUIContent("自定义类型"));
+                foreach (var item in marked)
+                {
+                    var dn = item.attr?.DisplayName ?? ObjectNames.NicifyVariableName(item.type.Name);
+                    var cat = item.attr?.Category ?? "自定义";
+                    var ct = item.type;
+                    menu.AddItem(new GUIContent($"{cat}/{dn}"), false, () =>
+                    {
+                        try { Switch(containerProp, new SerializableValue { value = Activator.CreateInstance(ct) }); } catch { }
+                    });
+                }
+            }
             menu.ShowAsContext();
         }
 
-        private void SwitchValueType(SerializedProperty containerProp, ValueContainer newContainer)
+        private void Switch(SerializedProperty cp, ValueContainer vc) { cp.managedReferenceValue = vc; cp.serializedObject.ApplyModifiedProperties(); }
+
+        private List<(Type type, DataEntryTypeAttribute attr)> CollectDataEntryTypes()
         {
-            containerProp.managedReferenceValue = newContainer;
-            containerProp.serializedObject.ApplyModifiedProperties();
+            var r = new List<(Type, DataEntryTypeAttribute)>();
+            foreach (var a in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (a.IsDynamic) continue;
+                try
+                {
+                    foreach (var t in a.GetExportedTypes())
+                    {
+                        if (!t.IsClass || t.IsAbstract || !t.IsSerializable) continue;
+                        var attrs = t.GetCustomAttributes(typeof(DataEntryTypeAttribute), false);
+                        if (attrs.Length > 0)
+                        {
+                            var at = attrs[0] as DataEntryTypeAttribute;
+                            r.Add((t, at));
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            r.Sort((a, b) =>
+            {
+                var catA = a.Item2?.Category ?? "";
+                var catB = b.Item2?.Category ?? "";
+                int cmp = string.Compare(catA, catB, StringComparison.Ordinal);
+                if (cmp != 0) return cmp;
+
+                var nameA = a.Item2?.DisplayName ?? a.Item1.Name;
+                var nameB = b.Item2?.DisplayName ?? b.Item1.Name;
+                return string.Compare(nameA, nameB, StringComparison.Ordinal);
+            });
+
+            return r;
         }
     }
 }

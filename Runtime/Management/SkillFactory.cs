@@ -1,3 +1,4 @@
+using UnityEngine;
 namespace TechCosmos.SkillSystem.Runtime
 {
     public static class SkillFactory<T> where T : class, IUnit<T>
@@ -22,6 +23,18 @@ namespace TechCosmos.SkillSystem.Runtime
             IExecuteLayer<T> executeLayer = new ExecuteLayer<T>();
 
             return new Skill<T>(baseLayer, infoLayer, conditionLayer, mechanismLayer, dataLayer, executeLayer);
+        }
+        /// <summary>
+        /// 从 SkillDataSO 创建技能
+        /// </summary>
+        public static ISkill<T> CreateSkill(SkillDataSO<T> skillDataSO)
+        {
+            if (skillDataSO == null)
+            {
+                Debug.LogError("SkillDataSO 为空，无法创建技能");
+                return null;
+            }
+            return CreateSkill(skillDataSO.GetSkillData());
         }
     }
 }
