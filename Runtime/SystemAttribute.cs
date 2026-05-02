@@ -92,7 +92,7 @@ namespace TechCosmos.SkillSystem.Runtime
         }
     }
 }
-[AttributeUsage(AttributeTargets.Class, Inherited = true)]
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public class AutoGenerateConditionAttribute : Attribute
 {
     public Type[] TargetTypes { get; }
@@ -104,7 +104,7 @@ public class AutoGenerateConditionAttribute : Attribute
 /// <summary>
 /// 标记需要自动生成非泛型子类的泛型机制
 /// </summary>
-[AttributeUsage(AttributeTargets.Class, Inherited = true, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
     public class AutoGenerateMechanismAttribute : Attribute
     {
         /// <summary>

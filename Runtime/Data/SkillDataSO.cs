@@ -168,22 +168,20 @@ namespace TechCosmos.SkillSystem.Runtime
         public HashSet<string> GetGeneratedKeys()
         {
             var keys = new HashSet<string>();
-            var soType = GetType();
-            var props = soType.GetProperties(
-                System.Reflection.BindingFlags.Public |
-                System.Reflection.BindingFlags.Instance)
-                .Where(p => p.CanRead && p.CanWrite);
-
-            foreach (var prop in props)
+            try
             {
-                var tooltip = prop.GetCustomAttributes(typeof(TooltipAttribute), false)
-                    .FirstOrDefault() as TooltipAttribute;
-                if (tooltip != null)
+                foreach (var prop in GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
                 {
-                    // 从 Tooltip 无法直接获取 DataKey，直接用属性名
-                    keys.Add(prop.Name);
+                    var attrs = prop.GetCustomAttributes(typeof(TooltipAttribute), false);
+                    if (attrs.Length > 0)
+                    {
+                        keys.Add(prop.Name);
+                        keys.Add(char.ToLower(prop.Name[0]) + prop.Name.Substring(1));
+                        keys.Add(char.ToUpper(prop.Name[0]) + prop.Name.Substring(1));
+                    }
                 }
             }
+            catch { }
             return keys;
         }
 
