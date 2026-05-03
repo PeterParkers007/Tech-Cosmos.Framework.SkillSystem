@@ -21,7 +21,6 @@ namespace TechCosmos.SkillSystem.Editor
         /// <summary>
         /// 从所有 IUnit 实现的 GetSupportedEvents() 收集事件，生成枚举
         /// </summary>
-        [MenuItem("Tech-Cosmos/SkillSystem/Generator/Update TriggerEvent Enum")]
         public static void UpdateTriggerEventEnum()
         {
             var events = CollectAllEvents();

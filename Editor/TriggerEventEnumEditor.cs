@@ -17,7 +17,7 @@ namespace TechCosmos.SkillSystem.Editor
 
         private const string ENUM_FILE_PATH = "Assets/Generated/TriggerEventType.cs";
 
-        [MenuItem("Tech-Cosmos/SkillSystem/Generator/TriggerEvent Enum Editor")]
+        [MenuItem("Tech-Cosmos/SkillSystem/TriggerEvent Enum Editor")]
         public static void OpenWindow()
         {
             var window = GetWindow<TriggerEventEnumEditor>("TriggerEvent 枚举编辑器");
