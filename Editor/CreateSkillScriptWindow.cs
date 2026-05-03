@@ -20,7 +20,7 @@ namespace TechCosmos.SkillSystem.Editor
         private List<Type> unitTypes = new();
         private Vector2 scrollPos;
         private string searchFilter = "";
-
+        private bool typesDirty = true;
         [MenuItem("Tech-Cosmos/SkillSystem/Create Skill Script", priority = 1)]
         public static void OpenWindow()
         {
@@ -53,6 +53,7 @@ namespace TechCosmos.SkillSystem.Editor
 
         void OnEnable()
         {
+            typesDirty = true;
             RefreshUnitTypes();
         }
 
@@ -180,10 +181,10 @@ namespace TechCosmos.SkillSystem.Editor
 
             EditorGUILayout.EndScrollView();
         }
-
+        
         private void RefreshUnitTypes()
         {
-            if (unitTypes.Count > 0) return; // 只扫一次
+            if (!typesDirty && unitTypes.Count > 0) return;
 
             unitTypes = AppDomain.CurrentDomain.GetAssemblies()
                 .Where(a => !a.IsDynamic)
@@ -197,22 +198,25 @@ namespace TechCosmos.SkillSystem.Editor
                     i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IUnit<>)))
                 .OrderBy(t => t.Name)
                 .ToList();
+
+            typesDirty = false;
         }
 
         private void CreateScript(ScriptType type)
         {
             string folderPath = GetCurrentProjectPath();
-            string defaultName = type == ScriptType.Mechanism ? "NewMechanism.cs" : "NewCondition.cs";
-            string filePath = Path.Combine(folderPath, defaultName);
+
+            // 用用户输入的类名作为文件名
+            string fileName = className + ".cs";
+            string filePath = Path.Combine(folderPath, fileName);
             filePath = AssetDatabase.GenerateUniqueAssetPath(filePath);
 
-            string className = Path.GetFileNameWithoutExtension(filePath);
+            // 重新提取类名（因为有唯一化处理可能加了数字）
+            string finalClassName = Path.GetFileNameWithoutExtension(filePath);
             string namespaceName = !string.IsNullOrWhiteSpace(this.namespaceName)
                 ? this.namespaceName
                 : GetNamespaceFromPath(filePath);
-
-            string unitTypeName = selectedUnitType?.Name ?? "Character";
-            string attributeName = type == ScriptType.Mechanism ? "AutoGenerateMechanism" : "AutoGenerateCondition";
+            string unitTypeName = selectedUnitType?.Name ?? unitTypes.FirstOrDefault()?.Name ?? "Character";
 
             // 读取模板
             string templatePath = FindTemplatePath(type == ScriptType.Mechanism
@@ -223,14 +227,14 @@ namespace TechCosmos.SkillSystem.Editor
             {
                 code = File.ReadAllText(templatePath)
                     .Replace("#NAMESPACE#", namespaceName)
-                    .Replace("#CLASSNAME#", className)
+                    .Replace("#CLASSNAME#", finalClassName)
                     .Replace("#UNITTYPE#", unitTypeName);
             }
             else
             {
                 code = type == ScriptType.Mechanism
-                    ? GenerateMechanismCode(className, namespaceName, unitTypeName)
-                    : GenerateConditionCode(className, namespaceName, unitTypeName);
+                    ? GenerateMechanismCode(finalClassName, namespaceName, unitTypeName)
+                    : GenerateConditionCode(finalClassName, namespaceName, unitTypeName);
             }
 
             File.WriteAllText(filePath, code);
