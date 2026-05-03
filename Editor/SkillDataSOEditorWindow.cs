@@ -198,6 +198,13 @@ namespace TechCosmos.SkillSystem.Editor
 
         void OnGUI()
         {
+            // 编译后对象可能被销毁，强制验证
+            if (currentTarget != null && (currentTarget.GetInstanceID() == 0 || serializedObject == null || serializedObject.targetObject == null))
+            {
+                currentTarget = null;
+                serializedObject = null; 
+                serializedDataProp = null;
+            }
 
             DrawToolbar();
 
@@ -321,11 +328,40 @@ namespace TechCosmos.SkillSystem.Editor
         {
             DrawSectionHeader("基础信息");
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillType"), new GUIContent("技能类型"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("TriggerEvent"), new GUIContent("触发事件"));
+            DrawTriggerEventField();
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillName"), new GUIContent("技能名称"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillDescription"), new GUIContent("技能描述"));
+
             EditorGUILayout.EndVertical();
+        }
+
+        private void DrawTriggerEventField()
+        {
+            var triggerProp = serializedObject.FindProperty("TriggerEvent");
+            var enumType = GetTriggerEventEnumType();
+
+            if (enumType != null && Enum.TryParse(enumType, triggerProp.stringValue, out var enumVal))
+            {
+                var newVal = EditorGUILayout.EnumPopup("触发事件", (Enum)enumVal);
+                if (newVal.ToString() != triggerProp.stringValue)
+                    triggerProp.stringValue = newVal.ToString();
+            }
+            else
+            {
+                triggerProp.stringValue = EditorGUILayout.TextField("触发事件", triggerProp.stringValue);
+            }
+        }
+
+        private static Type GetTriggerEventEnumType()
+        {
+            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var type = asm.GetType("TechCosmos.SkillSystem.Runtime.TriggerEventType");
+                if (type != null && type.IsEnum) return type;
+            }
+            return null;
         }
 
         private void DrawConditions()

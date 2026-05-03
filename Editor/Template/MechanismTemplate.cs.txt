@@ -1,0 +1,22 @@
+using System;
+using TechCosmos.SkillSystem.Runtime;
+using UnityEngine;
+
+namespace #NAMESPACE#
+{
+    [Serializable]
+    [AutoGenerateMechanism(typeof(#UNITTYPE#))]
+    public class #CLASSNAME#<T> : Mechanism<T> where T : class, IUnit<T>
+    {
+        #region 可配置参数
+
+        // [SerializeField] private float exampleValue = 1f;
+
+        #endregion
+
+        public override void Execute(SkillContext<T> context, IDataLayer<T> dataLayer)
+        {
+            
+        }
+    }
+}

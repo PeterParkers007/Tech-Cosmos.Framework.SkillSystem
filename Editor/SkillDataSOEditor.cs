@@ -533,7 +533,45 @@ namespace TechCosmos.SkillSystem.Editor
             }
             menu.ShowAsContext();
         }
+        private void DrawBaseInfo()
+        {
+            EditorGUILayout.LabelField("基础信息", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillType"), new GUIContent("技能类型"));
+            DrawTriggerEventField();
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillName"), new GUIContent("技能名称"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillDescription"), new GUIContent("技能描述"));
+
+            EditorGUILayout.EndVertical();
+        }
+
+        private void DrawTriggerEventField()
+        {
+            var triggerProp = serializedObject.FindProperty("TriggerEvent");
+            var enumType = GetTriggerEventEnumType();
+
+            if (enumType != null && Enum.TryParse(enumType, triggerProp.stringValue, out var enumVal))
+            {
+                var newVal = EditorGUILayout.EnumPopup("触发事件", (Enum)enumVal);
+                if (newVal.ToString() != triggerProp.stringValue)
+                    triggerProp.stringValue = newVal.ToString();
+            }
+            else
+            {
+                triggerProp.stringValue = EditorGUILayout.TextField("触发事件", triggerProp.stringValue);
+            }
+        }
+
+        private static Type GetTriggerEventEnumType()
+        {
+            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var type = asm.GetType("TechCosmos.SkillSystem.Runtime.TriggerEventType");
+                if (type != null && type.IsEnum) return type;
+            }
+            return null;
+        }
         private void Switch(SerializedProperty cp, ValueContainer vc) { cp.managedReferenceValue = vc; cp.serializedObject.ApplyModifiedProperties(); }
 
         private List<(Type type, DataEntryTypeAttribute attr)> CollectDataEntryTypes()

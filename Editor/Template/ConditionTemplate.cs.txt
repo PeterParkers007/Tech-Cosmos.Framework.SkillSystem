@@ -1,0 +1,22 @@
+using System;
+using TechCosmos.SkillSystem.Runtime;
+using UnityEngine;
+
+namespace #NAMESPACE#
+{
+    [Serializable]
+    [AutoGenerateCondition(typeof(#UNITTYPE#))]
+    public class #CLASSNAME#<T> : Condition<T> where T : class, IUnit<T>
+    {
+        #region 可配置参数
+
+        // [SerializeField] private float exampleValue = 1f;
+
+        #endregion
+
+        public override bool IsEligible(SkillContext<T> skillContext, IDataLayer<T> dataLayer)
+        {
+            return true;
+        }
+    }
+}
