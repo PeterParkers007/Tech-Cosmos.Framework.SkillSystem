@@ -3,6 +3,23 @@ using System;
 namespace TechCosmos.SkillSystem.Runtime
 {
     /// <summary>
+    /// 声明机制/条件需要的数据项
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
+    public class RequiredDataAttribute : Attribute
+    {
+        public string Key { get; }
+        public Type ValueType { get; }
+        public string DefaultValue { get; set; }
+        public string Description { get; set; }
+
+        public RequiredDataAttribute(string key, Type valueType)
+        {
+            Key = key;
+            ValueType = valueType;
+        }
+    }
+    /// <summary>
     /// 标记可以被添加到数据层字典的自定义类型
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]

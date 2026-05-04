@@ -22,6 +22,7 @@ namespace TechCosmos.SkillSystem.Editor
         private HashSet<string> cachedGeneratedKeys;
         private List<(Type type, DataEntryTypeAttribute attr)> cachedDataEntryTypes;
         private Dictionary<string, List<PropertyInfo>> cachedPropGroups;
+        private HashSet<string> _requiredKeys;
         private int lastTargetHash;
         private bool dirty = true;
 
@@ -138,6 +139,7 @@ namespace TechCosmos.SkillSystem.Editor
             cachedGeneratedKeys = null;
             cachedDataEntryTypes = null;
             cachedPropGroups = null;
+            _requiredKeys = null;
             lastTargetHash = 0;
             dirty = true;
         }
@@ -150,6 +152,7 @@ namespace TechCosmos.SkillSystem.Editor
             if (hash != lastTargetHash) return true;
             if (cachedGeneratedKeys == null) return true;
             if (cachedPropGroups == null) return true;
+            if (_requiredKeys == null) return true;
             return false;
         }
 
@@ -161,6 +164,7 @@ namespace TechCosmos.SkillSystem.Editor
             cachedGeneratedKeys = currentTarget.GetGeneratedKeys();
             cachedDataEntryTypes = CollectDataEntryTypesRaw();
             cachedPropGroups = BuildPropGroups();
+            _requiredKeys = CollectRequiredKeys();
             dirty = false;
         }
 
@@ -187,6 +191,35 @@ namespace TechCosmos.SkillSystem.Editor
                 groups[category].Add(prop);
             }
             return groups;
+        }
+
+        private HashSet<string> CollectRequiredKeys()
+        {
+            var keys = new HashSet<string>();
+
+            if (currentTarget?.Conditions != null)
+            {
+                foreach (var cond in currentTarget.Conditions)
+                {
+                    if (cond == null) continue;
+                    var attrs = cond.GetType().GetCustomAttributes<RequiredDataAttribute>();
+                    foreach (var attr in attrs)
+                        keys.Add(attr.Key);
+                }
+            }
+
+            if (currentTarget?.Mechanisms != null)
+            {
+                foreach (var mech in currentTarget.Mechanisms)
+                {
+                    if (mech == null) continue;
+                    var attrs = mech.GetType().GetCustomAttributes<RequiredDataAttribute>();
+                    foreach (var attr in attrs)
+                        keys.Add(attr.Key);
+                }
+            }
+
+            return keys;
         }
 
         private HashSet<string> GetGeneratedKeysCached() => cachedGeneratedKeys ?? new HashSet<string>();
@@ -227,6 +260,9 @@ namespace TechCosmos.SkillSystem.Editor
 
             RefreshCacheIfNeeded();
             serializedObject.Update();
+
+            // 同步必需数据项
+            SyncRequiredDataEntries();
 
             scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 
@@ -424,6 +460,7 @@ namespace TechCosmos.SkillSystem.Editor
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             var generatedKeys = GetGeneratedKeysCached();
+            var requiredKeys = _requiredKeys ?? new HashSet<string>();
 
             if (serializedDataProp != null)
             {
@@ -480,12 +517,27 @@ namespace TechCosmos.SkillSystem.Editor
         {
             var keyProp = element.FindPropertyRelative("key");
             var containerProp = element.FindPropertyRelative("valueContainer");
+            var key = keyProp.stringValue;
+            var requiredKeys = _requiredKeys ?? new HashSet<string>();
+            var generatedKeys = cachedGeneratedKeys ?? new HashSet<string>();
+            bool isLocked = requiredKeys.Contains(key) || generatedKeys.Contains(key);
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             EditorGUILayout.BeginHorizontal();
 
-            keyProp.stringValue = EditorGUILayout.TextField(keyProp.stringValue, GUILayout.Width(140));
+            // Key 输入框（必需的不可编辑）
+            if (isLocked)
+            {
+                var desc = GetRequiredKeyDescription(key);
+                var displayKey = string.IsNullOrEmpty(desc) ? key : $"{desc}";
+                EditorGUILayout.LabelField(displayKey, EditorStyles.boldLabel, GUILayout.Width(140));
+                EditorGUILayout.LabelField("🔒", GUILayout.Width(20));
+            }
+            else
+            {
+                keyProp.stringValue = EditorGUILayout.TextField(keyProp.stringValue, GUILayout.Width(140));
+            }
 
             if (containerProp.managedReferenceValue != null)
             {
@@ -517,20 +569,25 @@ namespace TechCosmos.SkillSystem.Editor
                     ShowTypeMenu(containerProp);
             }
 
-            GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
-            if (GUILayout.Button("✕", GUILayout.Width(25), GUILayout.Height(18)))
+            // 删除按钮：锁定的不可删除
+            if (!isLocked)
             {
-                serializedDataProp.DeleteArrayElementAtIndex(index);
-                dirty = true;
+                GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
+                if (GUILayout.Button("✕", GUILayout.Width(25), GUILayout.Height(18)))
+                {
+                    serializedDataProp.DeleteArrayElementAtIndex(index);
+                    dirty = true;
+                    GUI.backgroundColor = Color.white;
+                    EditorGUILayout.EndHorizontal();
+                    EditorGUILayout.EndVertical();
+                    return;
+                }
                 GUI.backgroundColor = Color.white;
-                EditorGUILayout.EndHorizontal();
-                EditorGUILayout.EndVertical();
-                return;
             }
-            GUI.backgroundColor = Color.white;
 
             EditorGUILayout.EndHorizontal();
 
+            // 值编辑区域
             if (containerProp.managedReferenceValue != null)
             {
                 EditorGUI.indentLevel++;
@@ -939,6 +996,151 @@ namespace TechCosmos.SkillSystem.Editor
 
         #endregion
 
+        #region 必需数据同步
+
+        private void SyncRequiredDataEntries()
+        {
+            if (currentTarget == null || serializedDataProp == null) return;
+
+            // 冲突检测
+            DetectAndReportTypeConflicts();
+
+            var requiredKeys = _requiredKeys ?? new HashSet<string>();
+            var existingKeys = new HashSet<string>();
+
+            // 收集现有 key
+            for (int i = 0; i < serializedDataProp.arraySize; i++)
+            {
+                var elem = serializedDataProp.GetArrayElementAtIndex(i);
+                existingKeys.Add(elem.FindPropertyRelative("key").stringValue);
+            }
+
+            // 添加缺失的必需数据
+            foreach (var key in requiredKeys)
+            {
+                if (!existingKeys.Contains(key))
+                {
+                    AddRequiredEntry(key);
+                }
+            }
+
+            // 移除不再需要的
+            for (int i = serializedDataProp.arraySize - 1; i >= 0; i--)
+            {
+                var elem = serializedDataProp.GetArrayElementAtIndex(i);
+                var key = elem.FindPropertyRelative("key").stringValue;
+
+                if (requiredKeys.Contains(key)) continue;
+                if (cachedGeneratedKeys?.Contains(key) == true) continue;
+
+                serializedDataProp.DeleteArrayElementAtIndex(i);
+            }
+        }
+
+        private void DetectAndReportTypeConflicts()
+        {
+            var keySources = new Dictionary<string, List<(Type Type, Type ExpectedType)>>();
+
+            foreach (var c in currentTarget.Conditions ?? Enumerable.Empty<ConditionBase>())
+            {
+                if (c == null) continue;
+                foreach (var attr in c.GetType().GetCustomAttributes<RequiredDataAttribute>())
+                {
+                    if (!keySources.ContainsKey(attr.Key))
+                        keySources[attr.Key] = new List<(Type, Type)>();
+                    keySources[attr.Key].Add((c.GetType(), attr.ValueType));
+                }
+            }
+
+            foreach (var m in currentTarget.Mechanisms ?? Enumerable.Empty<MechanismBase>())
+            {
+                if (m == null) continue;
+                foreach (var attr in m.GetType().GetCustomAttributes<RequiredDataAttribute>())
+                {
+                    if (!keySources.ContainsKey(attr.Key))
+                        keySources[attr.Key] = new List<(Type, Type)>();
+                    keySources[attr.Key].Add((m.GetType(), attr.ValueType));
+                }
+            }
+
+            foreach (var kv in keySources)
+            {
+                var types = kv.Value.Select(s => s.ExpectedType).Distinct().ToList();
+                if (types.Count > 1)
+                {
+                    var sources = string.Join(", ", kv.Value.Select(s => $"{s.Type.Name}(期望 {s.ExpectedType.Name})"));
+                    Debug.LogError(
+                        $"[技能系统] 数据键 '{kv.Key}' 类型冲突！\n" +
+                        $"  来源: {sources}");
+                }
+            }
+        }
+
+        private void AddRequiredEntry(string key)
+        {
+            var allAttrs = new List<RequiredDataAttribute>();
+
+            if (currentTarget.Conditions != null)
+                foreach (var c in currentTarget.Conditions)
+                    if (c != null)
+                        allAttrs.AddRange(c.GetType().GetCustomAttributes<RequiredDataAttribute>()
+                            .Where(a => a.Key == key));
+
+            if (currentTarget.Mechanisms != null)
+                foreach (var m in currentTarget.Mechanisms)
+                    if (m != null)
+                        allAttrs.AddRange(m.GetType().GetCustomAttributes<RequiredDataAttribute>()
+                            .Where(a => a.Key == key));
+
+            var attr = allAttrs.FirstOrDefault();
+            if (attr == null) return;
+
+            ValueContainer container;
+
+            if (attr.ValueType == typeof(float))
+                container = new FloatValue { value = float.TryParse(attr.DefaultValue, out var f) ? f : 0f };
+            else if (attr.ValueType == typeof(int))
+                container = new IntValue { value = int.TryParse(attr.DefaultValue, out var i) ? i : 0 };
+            else if (attr.ValueType == typeof(string))
+                container = new StringValue { value = attr.DefaultValue ?? "" };
+            else if (attr.ValueType == typeof(bool))
+                container = new BoolValue { value = bool.TryParse(attr.DefaultValue, out var b) && b };
+            else
+                container = new FloatValue { value = 0f };
+
+            int index = serializedDataProp.arraySize;
+            serializedDataProp.InsertArrayElementAtIndex(index);
+            var elem = serializedDataProp.GetArrayElementAtIndex(index);
+            elem.FindPropertyRelative("key").stringValue = key;
+            elem.FindPropertyRelative("valueContainer").managedReferenceValue = container;
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        private string GetRequiredKeyDescription(string key)
+        {
+            if (currentTarget == null) return null;
+
+            foreach (var c in currentTarget.Conditions ?? Enumerable.Empty<ConditionBase>())
+            {
+                if (c == null) continue;
+                var attr = c.GetType().GetCustomAttributes<RequiredDataAttribute>()
+                    .FirstOrDefault(a => a.Key == key);
+                if (attr != null) return attr.Description;
+            }
+
+            foreach (var m in currentTarget.Mechanisms ?? Enumerable.Empty<MechanismBase>())
+            {
+                if (m == null) continue;
+                var attr = m.GetType().GetCustomAttributes<RequiredDataAttribute>()
+                    .FirstOrDefault(a => a.Key == key);
+                if (attr != null) return attr.Description;
+            }
+
+            return null;
+        }
+
+        #endregion
+
         #region 工具方法
 
         private void AddEntry(string key, ValueContainer container)
@@ -1039,7 +1241,6 @@ namespace TechCosmos.SkillSystem.Editor
             }
             else
             {
-                // 按第一级分类分组（和 ShowInsertReferenceMenu 一样的逻辑）
                 var groups = casterPaths
                     .Select(p => new
                     {
@@ -1050,7 +1251,6 @@ namespace TechCosmos.SkillSystem.Editor
                     .GroupBy(x => x.Category)
                     .OrderBy(g => g.Key);
 
-                // caster 子菜单
                 foreach (var group in groups)
                 {
                     var categoryName = ObjectNames.NicifyVariableName(group.Key);
@@ -1082,7 +1282,6 @@ namespace TechCosmos.SkillSystem.Editor
                     }
                 }
 
-                // target 子菜单
                 foreach (var group in groups)
                 {
                     var categoryName = ObjectNames.NicifyVariableName(group.Key);
