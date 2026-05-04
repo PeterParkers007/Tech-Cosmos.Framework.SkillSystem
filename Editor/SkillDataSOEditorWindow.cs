@@ -17,7 +17,7 @@ namespace TechCosmos.SkillSystem.Editor
         private SerializedObject serializedObject;
         private SerializedProperty serializedDataProp;
         private double lastRepaintTime;
-        private const double REPAINT_INTERVAL = 0.05; // 每秒20帧够了
+        private const double REPAINT_INTERVAL = 0.05;
         // 缓存
         private HashSet<string> cachedGeneratedKeys;
         private List<(Type type, DataEntryTypeAttribute attr)> cachedDataEntryTypes;
@@ -50,7 +50,6 @@ namespace TechCosmos.SkillSystem.Editor
 
         private void OnAfterAssemblyReload()
         {
-            // 延迟一帧执行，确保 Unity 完全加载完毕
             EditorApplication.delayCall += () =>
             {
                 if (currentTarget != null)
@@ -202,7 +201,7 @@ namespace TechCosmos.SkillSystem.Editor
             if (currentTarget != null && (currentTarget.GetInstanceID() == 0 || serializedObject == null || serializedObject.targetObject == null))
             {
                 currentTarget = null;
-                serializedObject = null; 
+                serializedObject = null;
                 serializedDataProp = null;
             }
 
@@ -478,12 +477,15 @@ namespace TechCosmos.SkillSystem.Editor
             }
         }
 
+        // ===== 核心：数据条目绘制 =====
         private void DrawDataEntry(SerializedProperty element, int index)
         {
             var keyProp = element.FindPropertyRelative("key");
             var containerProp = element.FindPropertyRelative("valueContainer");
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // 第一行：Key + 类型标签 + 操作按钮
             EditorGUILayout.BeginHorizontal();
 
             keyProp.stringValue = EditorGUILayout.TextField(keyProp.stringValue, GUILayout.Width(140));
@@ -500,24 +502,19 @@ namespace TechCosmos.SkillSystem.Editor
                     nameof(SerializableValue) => GetTypeLabel(containerProp),
                     _ => "Obj"
                 };
-                EditorGUILayout.LabelField(typeLabel, EditorStyles.miniLabel, GUILayout.Width(50));
 
-                var valueProp = containerProp.FindPropertyRelative("value");
-                switch (containerProp.managedReferenceValue)
+                var originalColor = GUI.color;
+                GUI.color = typeLabel switch
                 {
-                    case FloatValue when valueProp != null:
-                        valueProp.floatValue = EditorGUILayout.FloatField(valueProp.floatValue); break;
-                    case IntValue when valueProp != null:
-                        valueProp.intValue = EditorGUILayout.IntField(valueProp.intValue); break;
-                    case StringValue when valueProp != null:
-                        valueProp.stringValue = EditorGUILayout.TextField(valueProp.stringValue); break;
-                    case BoolValue when valueProp != null:
-                        valueProp.boolValue = EditorGUILayout.Toggle(valueProp.boolValue); break;
-                    case FormulaValue:
-                        DrawFormulaInline(containerProp); break;
-                    case SerializableValue when valueProp != null:
-                        EditorGUILayout.PropertyField(valueProp, GUIContent.none, true); break;
-                }
+                    "Float" => new Color(0.3f, 0.7f, 1f),
+                    "Int" => new Color(0.3f, 1f, 0.5f),
+                    "Str" => new Color(1f, 0.8f, 0.3f),
+                    "Bool" => new Color(1f, 0.5f, 0.5f),
+                    "Formula" => new Color(1f, 0.4f, 1f),
+                    _ => Color.white
+                };
+                EditorGUILayout.LabelField(typeLabel, EditorStyles.miniLabel, GUILayout.Width(60));
+                GUI.color = originalColor;
 
                 if (GUILayout.Button("...", GUILayout.Width(25)))
                     ShowTypeMenu(containerProp);
@@ -536,27 +533,357 @@ namespace TechCosmos.SkillSystem.Editor
             GUI.backgroundColor = Color.white;
 
             EditorGUILayout.EndHorizontal();
+
+            // 值编辑区域
+            if (containerProp.managedReferenceValue != null)
+            {
+                EditorGUI.indentLevel++;
+
+                if (containerProp.managedReferenceValue is FormulaValue)
+                {
+                    DrawFormulaExpanded(containerProp);
+                }
+                else
+                {
+                    var valueProp = containerProp.FindPropertyRelative("value");
+                    switch (containerProp.managedReferenceValue)
+                    {
+                        case FloatValue when valueProp != null:
+                            valueProp.floatValue = EditorGUILayout.FloatField("值", valueProp.floatValue);
+                            break;
+                        case IntValue when valueProp != null:
+                            valueProp.intValue = EditorGUILayout.IntField("值", valueProp.intValue);
+                            break;
+                        case StringValue when valueProp != null:
+                            valueProp.stringValue = EditorGUILayout.TextField("值", valueProp.stringValue);
+                            break;
+                        case BoolValue when valueProp != null:
+                            valueProp.boolValue = EditorGUILayout.Toggle("值", valueProp.boolValue);
+                            break;
+                        case SerializableValue when valueProp != null:
+                            EditorGUILayout.PropertyField(valueProp, new GUIContent("值"), true);
+                            break;
+                    }
+                }
+
+                EditorGUI.indentLevel--;
+            }
+
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawFormulaInline(SerializedProperty containerProp)
+        // ===== 展开的公式编辑 =====
+        private void DrawFormulaExpanded(SerializedProperty containerProp)
         {
             var ft = containerProp.FindPropertyRelative("formulaType");
             var sv = containerProp.FindPropertyRelative("staticValue");
             var rp = containerProp.FindPropertyRelative("referencePath");
+            var mp = containerProp.FindPropertyRelative("multiplier");
+            var off = containerProp.FindPropertyRelative("offset");
+            var op = containerProp.FindPropertyRelative("operatorType");
             var cf = containerProp.FindPropertyRelative("customFormula");
 
-            switch ((FormulaValue.FormulaType)ft.enumValueIndex)
+            EditorGUILayout.PropertyField(ft, new GUIContent("公式类型"));
+
+            var type = (FormulaValue.FormulaType)ft.enumValueIndex;
+
+            switch (type)
             {
                 case FormulaValue.FormulaType.Static:
-                    sv.floatValue = EditorGUILayout.FloatField(sv.floatValue, GUILayout.Width(80)); break;
+                    sv.floatValue = EditorGUILayout.FloatField("静态值", sv.floatValue);
+                    break;
+
                 case FormulaValue.FormulaType.Reference:
+                    EditorGUILayout.BeginHorizontal();
+                    rp.stringValue = EditorGUILayout.TextField("引用路径", rp.stringValue);
+                    if (GUILayout.Button("▼", GUILayout.Width(25)))
+                        ShowReferencePathMenu(rp);
+                    EditorGUILayout.EndHorizontal();
+
+                    var ops = new[] { "Multiply", "Add", "Set" };
+                    var opNames = new[] { "× 乘", "+ 加", "= 设" };
+                    int opIdx = System.Array.IndexOf(ops, op.stringValue);
+                    if (opIdx < 0) opIdx = 0;
+                    opIdx = EditorGUILayout.Popup("操作符", opIdx, opNames);
+                    op.stringValue = ops[opIdx];
+
+                    mp.floatValue = EditorGUILayout.FloatField("乘数", mp.floatValue);
+                    off.floatValue = EditorGUILayout.FloatField("偏移", off.floatValue);
+
+                    EditorGUILayout.HelpBox("💡 需要多引用值计算？切换到「自定义」类型可获得完整公式编辑能力", MessageType.Info);
+                    if (GUILayout.Button("升级为自定义公式"))
+                    {
+                        string currentPath = rp.stringValue;
+                        if (!string.IsNullOrEmpty(currentPath))
+                        {
+                            string formulaStr = currentPath;
+                            if (mp.floatValue != 1f)
+                                formulaStr = $"{currentPath} * {mp.floatValue}";
+                            if (off.floatValue != 0)
+                                formulaStr += $" + {off.floatValue}";
+                            cf.stringValue = formulaStr;
+                        }
+                        ft.enumValueIndex = (int)FormulaValue.FormulaType.Custom;
+                        dirty = true;
+                    }
+                    break;
+
                 case FormulaValue.FormulaType.Expression:
-                    rp.stringValue = EditorGUILayout.TextField(rp.stringValue, GUILayout.Width(120));
-                    sv.floatValue = EditorGUILayout.FloatField(sv.floatValue, GUILayout.Width(50)); break;
+                    EditorGUILayout.BeginHorizontal();
+                    rp.stringValue = EditorGUILayout.TextField("引用路径", rp.stringValue);
+                    if (GUILayout.Button("▼", GUILayout.Width(25)))
+                        ShowReferencePathMenu(rp);
+                    EditorGUILayout.EndHorizontal();
+
+                    mp.floatValue = EditorGUILayout.FloatField("乘数", mp.floatValue);
+                    off.floatValue = EditorGUILayout.FloatField("偏移", off.floatValue);
+                    break;
+
                 case FormulaValue.FormulaType.Custom:
-                    cf.stringValue = EditorGUILayout.TextField(cf.stringValue, GUILayout.Width(120)); break;
+                    DrawCustomFormulaEditor(cf);
+                    break;
             }
+        }
+
+        // ===== 自定义公式编辑器（极简版） =====
+        private void DrawCustomFormulaEditor(SerializedProperty customFormulaProp)
+        {
+            if (!foldoutStates.ContainsKey("formula_help")) foldoutStates["formula_help"] = false;
+            foldoutStates["formula_help"] = EditorGUILayout.Foldout(foldoutStates["formula_help"], "📐 公式语法帮助");
+            if (foldoutStates["formula_help"])
+            {
+                EditorGUILayout.HelpBox(
+                    "变量：caster, target\n" +
+                    "引用：caster.Runtime.Attack\n" +
+                    "运算符：+  -  *  /  (  )\n" +
+                    "示例：caster.Attack * 1.5 + target.MaxHealth * 0.1",
+                    MessageType.Info);
+            }
+
+            var textStyle = new GUIStyle(EditorStyles.textArea)
+            {
+                wordWrap = true,
+                font = EditorStyles.standardFont
+            };
+
+            float lineHeight = EditorGUIUtility.singleLineHeight;
+            int lineCount = Mathf.Max(2, Mathf.Min(6, customFormulaProp.stringValue.Split('\n').Length));
+            var formulaRect = EditorGUILayout.GetControlRect(false, lineHeight * lineCount + 6);
+            customFormulaProp.stringValue = EditorGUI.TextArea(formulaRect, customFormulaProp.stringValue, textStyle);
+
+            EditorGUILayout.Space(3);
+
+            EditorGUILayout.BeginHorizontal();
+
+            if (GUILayout.Button("📌 引用", EditorStyles.miniButtonLeft, GUILayout.Height(24)))
+                ShowInsertReferenceMenu(customFormulaProp);
+
+            if (GUILayout.Button("⚙ 运算符", EditorStyles.miniButtonMid, GUILayout.Height(24)))
+                ShowInsertOperatorMenu(customFormulaProp);
+
+            if (GUILayout.Button("🔢 数值", EditorStyles.miniButtonMid, GUILayout.Height(24)))
+                ShowInsertNumberMenu(customFormulaProp);
+
+            if (GUILayout.Button("✅ 检查", EditorStyles.miniButtonRight, GUILayout.Height(24)))
+                ShowFormulaCheckPopup(customFormulaProp);
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        // ===== 引用路径下拉菜单 =====
+        private void ShowInsertReferenceMenu(SerializedProperty customFormulaProp)
+        {
+            var so = currentTarget;
+            var ut = so?.GetUnitType();
+            if (ut == null) return;
+
+            var menu = new GenericMenu();
+
+            var casterPaths = CollectAllFieldPaths(ut, "caster.", new HashSet<Type>()).OrderBy(p => p).ToList();
+
+            if (casterPaths.Count == 0)
+            {
+                menu.AddDisabledItem(new GUIContent("未找到可用字段"));
+                menu.ShowAsContext();
+                return;
+            }
+
+            // 按第一级分类分组
+            var groups = casterPaths
+                .Select(p => new
+                {
+                    FullPath = p,
+                    ShortPath = p.Substring("caster.".Length),
+                    Category = p.Substring("caster.".Length).Split('.')[0]
+                })
+                .GroupBy(x => x.Category)
+                .OrderBy(g => g.Key);
+
+            // caster 子菜单
+            foreach (var group in groups)
+            {
+                var categoryName = ObjectNames.NicifyVariableName(group.Key);
+                var items = group.ToList();
+
+                if (items.Count == 1)
+                {
+                    var item = items[0];
+                    menu.AddItem(new GUIContent($"caster/{categoryName}"), false, () =>
+                    {
+                        InsertAtCursor(customFormulaProp, item.FullPath);
+                        dirty = true;
+                    });
+                }
+                else
+                {
+                    foreach (var item in items)
+                    {
+                        var subPath = item.ShortPath.Substring(item.Category.Length + 1);
+                        var displayName = ObjectNames.NicifyVariableName(subPath.Replace(".", "/"));
+                        menu.AddItem(new GUIContent($"caster/{categoryName}/{displayName}"), false, () =>
+                        {
+                            InsertAtCursor(customFormulaProp, item.FullPath);
+                            dirty = true;
+                        });
+                    }
+                }
+            }
+
+            // target 子菜单（直接复用 caster 路径，替换前缀）
+            foreach (var group in groups)
+            {
+                var categoryName = ObjectNames.NicifyVariableName(group.Key);
+                var items = group.ToList();
+
+                if (items.Count == 1)
+                {
+                    var item = items[0];
+                    var targetPath = "target." + item.ShortPath;
+                    menu.AddItem(new GUIContent($"target/{categoryName}"), false, () =>
+                    {
+                        InsertAtCursor(customFormulaProp, targetPath);
+                        dirty = true;
+                    });
+                }
+                else
+                {
+                    foreach (var item in items)
+                    {
+                        var targetPath = "target." + item.ShortPath;
+                        var subPath = item.ShortPath.Substring(item.Category.Length + 1);
+                        var displayName = ObjectNames.NicifyVariableName(subPath.Replace(".", "/"));
+                        menu.AddItem(new GUIContent($"target/{categoryName}/{displayName}"), false, () =>
+                        {
+                            InsertAtCursor(customFormulaProp, targetPath);
+                            dirty = true;
+                        });
+                    }
+                }
+            }
+
+            menu.ShowAsContext();
+        }
+
+        // ===== 运算符下拉菜单 =====
+        private void ShowInsertOperatorMenu(SerializedProperty customFormulaProp)
+        {
+            var menu = new GenericMenu();
+
+            menu.AddItem(new GUIContent("  +  加法"), false, () => InsertAtCursor(customFormulaProp, " + "));
+            menu.AddItem(new GUIContent("  -  减法"), false, () => InsertAtCursor(customFormulaProp, " - "));
+            menu.AddItem(new GUIContent("  *  乘法"), false, () => InsertAtCursor(customFormulaProp, " * "));
+            menu.AddItem(new GUIContent("  /  除法"), false, () => InsertAtCursor(customFormulaProp, " / "));
+            menu.AddSeparator("");
+            menu.AddItem(new GUIContent("  (  左括号"), false, () => InsertAtCursor(customFormulaProp, "("));
+            menu.AddItem(new GUIContent("  )  右括号"), false, () => InsertAtCursor(customFormulaProp, ")"));
+            menu.AddSeparator("");
+            menu.AddItem(new GUIContent("常用数值"), false, () => ShowInsertNumberMenu(customFormulaProp));
+            menu.AddItem(new GUIContent("常用组合"), false, () => ShowInsertComboMenu(customFormulaProp));
+
+            menu.ShowAsContext();
+        }
+
+        // ===== 数值下拉菜单 =====
+        private void ShowInsertNumberMenu(SerializedProperty customFormulaProp)
+        {
+            var menu = new GenericMenu();
+
+            menu.AddDisabledItem(new GUIContent("── 小数 ──"));
+            menu.AddItem(new GUIContent("  0.01  (1%)"), false, () => InsertAtCursor(customFormulaProp, "0.01"));
+            menu.AddItem(new GUIContent("  0.05  (5%)"), false, () => InsertAtCursor(customFormulaProp, "0.05"));
+            menu.AddItem(new GUIContent("  0.1   (10%)"), false, () => InsertAtCursor(customFormulaProp, "0.1"));
+            menu.AddItem(new GUIContent("  0.25  (25%)"), false, () => InsertAtCursor(customFormulaProp, "0.25"));
+            menu.AddItem(new GUIContent("  0.5   (50%)"), false, () => InsertAtCursor(customFormulaProp, "0.5"));
+            menu.AddItem(new GUIContent("  0.75  (75%)"), false, () => InsertAtCursor(customFormulaProp, "0.75"));
+
+            menu.AddSeparator("");
+            menu.AddDisabledItem(new GUIContent("── 整数 ──"));
+            menu.AddItem(new GUIContent("  1"), false, () => InsertAtCursor(customFormulaProp, "1"));
+            menu.AddItem(new GUIContent("  10"), false, () => InsertAtCursor(customFormulaProp, "10"));
+            menu.AddItem(new GUIContent("  100"), false, () => InsertAtCursor(customFormulaProp, "100"));
+            menu.AddItem(new GUIContent("  1000"), false, () => InsertAtCursor(customFormulaProp, "1000"));
+
+            menu.AddSeparator("");
+            menu.AddDisabledItem(new GUIContent("── 负值 ──"));
+            menu.AddItem(new GUIContent("  -1"), false, () => InsertAtCursor(customFormulaProp, "-1"));
+            menu.AddItem(new GUIContent("  -0.5"), false, () => InsertAtCursor(customFormulaProp, "-0.5"));
+
+            menu.ShowAsContext();
+        }
+
+        // ===== 常用组合下拉菜单 =====
+        private void ShowInsertComboMenu(SerializedProperty customFormulaProp)
+        {
+            var menu = new GenericMenu();
+
+            menu.AddDisabledItem(new GUIContent("── 常用引用组合 ──"));
+            menu.AddItem(new GUIContent("  caster.  +  target."), false, () => InsertAtCursor(customFormulaProp, "caster. + target."));
+            menu.AddItem(new GUIContent("  caster.  -  target."), false, () => InsertAtCursor(customFormulaProp, "caster. - target."));
+            menu.AddItem(new GUIContent("  caster.  *  target."), false, () => InsertAtCursor(customFormulaProp, "caster. * target."));
+
+            menu.AddSeparator("");
+            menu.AddDisabledItem(new GUIContent("── 常见公式模板 ──"));
+            menu.AddItem(new GUIContent("  攻击力 × 倍率"), false, () => InsertAtCursor(customFormulaProp, "caster.Attack * "));
+            menu.AddItem(new GUIContent("  攻击力 - 防御力"), false, () => InsertAtCursor(customFormulaProp, "caster.Attack - target.Defense"));
+            menu.AddItem(new GUIContent("  最大生命值百分比"), false, () => InsertAtCursor(customFormulaProp, "target.MaxHealth * 0."));
+            menu.AddItem(new GUIContent("  当前生命值百分比"), false, () => InsertAtCursor(customFormulaProp, "target.Health * 0."));
+
+            menu.ShowAsContext();
+        }
+
+        // ===== 语法检查弹窗 =====
+        private void ShowFormulaCheckPopup(SerializedProperty customFormulaProp)
+        {
+            string formula = customFormulaProp.stringValue;
+
+            if (string.IsNullOrWhiteSpace(formula))
+            {
+                EditorUtility.DisplayDialog("公式检查", "公式为空", "确定");
+                return;
+            }
+
+            var issues = new List<string>();
+
+            int openParens = formula.Count(c => c == '(');
+            int closeParens = formula.Count(c => c == ')');
+            if (openParens != closeParens)
+                issues.Add($"⚠ 括号不匹配（左：{openParens}，右：{closeParens}）");
+
+            var matches = System.Text.RegularExpressions.Regex.Matches(formula, @"\b(caster|target)(\.[\w]+)+\b");
+            var uniquePaths = new HashSet<string>();
+            foreach (System.Text.RegularExpressions.Match m in matches)
+                uniquePaths.Add(m.Value);
+
+            if (uniquePaths.Count > 0)
+                issues.Add($"✅ 检测到 {uniquePaths.Count} 个引用路径：\n  " + string.Join("\n  ", uniquePaths));
+            else
+                issues.Add("💡 未检测到引用路径（纯数值计算）");
+
+            if (System.Text.RegularExpressions.Regex.IsMatch(formula, @"[\+\-\*/]{2,}"))
+                issues.Add("⚠ 存在连续运算符");
+
+            string result = string.Join("\n\n", issues);
+            EditorUtility.DisplayDialog("公式检查", result, "确定");
         }
 
         private object DrawField(Type type, string label, object value)
@@ -646,7 +973,10 @@ namespace TechCosmos.SkillSystem.Editor
             menu.AddItem(new GUIContent("String"), false, () => SwitchType(cp, new StringValue()));
             menu.AddItem(new GUIContent("Bool"), false, () => SwitchType(cp, new BoolValue()));
             menu.AddSeparator("");
-            menu.AddItem(new GUIContent("Formula"), false, () => SwitchType(cp, new FormulaValue()));
+            menu.AddItem(new GUIContent("Formula/Static"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Static }));
+            menu.AddItem(new GUIContent("Formula/Reference"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Reference }));
+            menu.AddItem(new GUIContent("Formula/Expression"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Expression, multiplier = 1f }));
+            menu.AddItem(new GUIContent("Formula/Custom"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Custom }));
 
             var marked = GetDataEntryTypesCached();
             if (marked.Count > 0)
@@ -691,6 +1021,99 @@ namespace TechCosmos.SkillSystem.Editor
             int end = tooltip.IndexOf(']');
             if (end > 0 && end < tooltip.Length - 1) return tooltip.Substring(end + 2).Trim();
             return tooltip;
+        }
+
+        private void ShowReferencePathMenu(SerializedProperty pathProp)
+        {
+            var menu = new GenericMenu();
+            var so = currentTarget;
+            var ut = so?.GetUnitType();
+            var pp = pathProp.propertyPath;
+            var to = pathProp.serializedObject.targetObject;
+            if (ut != null)
+            {
+                CollectFieldsForMenu(ut, "caster", menu, pp, to);
+                menu.AddSeparator("");
+                CollectFieldsForMenu(ut, "target", menu, pp, to);
+            }
+            menu.AddSeparator("");
+            menu.AddItem(new GUIContent("清除路径"), false, () =>
+            {
+                var s = new SerializedObject(to);
+                var sp = s.FindProperty(pp);
+                if (sp != null) { sp.stringValue = ""; s.ApplyModifiedProperties(); }
+            });
+            menu.ShowAsContext();
+        }
+
+        private void CollectFieldsForMenu(Type ut, string prefix, GenericMenu menu, string pp, UnityEngine.Object to)
+        {
+            bool any = false;
+            foreach (var f in ut.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                var attr = f.GetCustomAttribute<SkillDataFieldAttribute>();
+                if (attr == null) continue;
+                var dn = attr.DisplayName ?? ObjectNames.NicifyVariableName(f.Name);
+                if (ShouldFlattenInMenu(f.FieldType))
+                    foreach (var sf in f.FieldType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        any = true;
+                        var cap = $"{prefix}.{f.Name}.{sf.Name}";
+                        menu.AddItem(new GUIContent($"{prefix}/{dn}/{ObjectNames.NicifyVariableName(sf.Name)}"), false, () =>
+                        {
+                            var s = new SerializedObject(to);
+                            var sp = s.FindProperty(pp);
+                            if (sp != null) { sp.stringValue = cap; s.ApplyModifiedProperties(); }
+                        });
+                    }
+                else if (IsSimpleType(f.FieldType))
+                {
+                    any = true;
+                    var cap = $"{prefix}.{f.Name}";
+                    menu.AddItem(new GUIContent($"{prefix}/{dn}"), false, () =>
+                    {
+                        var s = new SerializedObject(to);
+                        var sp = s.FindProperty(pp);
+                        if (sp != null) { sp.stringValue = cap; s.ApplyModifiedProperties(); }
+                    });
+                }
+            }
+            if (!any) menu.AddDisabledItem(new GUIContent($"{prefix}/(无)"));
+        }
+
+        private bool ShouldFlattenInMenu(Type t) => !t.IsPrimitive && t != typeof(string) && !t.IsEnum && !t.IsArray && !t.IsGenericType && !typeof(UnityEngine.Object).IsAssignableFrom(t) && t.IsSerializable;
+
+        private bool IsSimpleType(Type t) => t.IsPrimitive || t == typeof(string) || t == typeof(float) || t == typeof(int) || t == typeof(bool) || t == typeof(double) || t.IsEnum || t == typeof(Vector2) || t == typeof(Vector3);
+
+        // ===== 递归收集字段路径 =====
+        private List<string> CollectAllFieldPaths(Type type, string prefix, HashSet<Type> visited)
+        {
+            var paths = new List<string>();
+            if (type == null || !visited.Add(type)) return paths;
+
+            foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                var attr = f.GetCustomAttribute<SkillDataFieldAttribute>();
+                if (attr == null) continue;
+
+                if (IsSimpleType(f.FieldType))
+                {
+                    paths.Add(prefix + f.Name);
+                }
+                else if (ShouldFlattenInMenu(f.FieldType))
+                {
+                    paths.AddRange(CollectAllFieldPaths(f.FieldType, prefix + f.Name + ".", visited));
+                }
+            }
+            return paths;
+        }
+
+        // ===== 在光标位置插入文本 =====
+        private void InsertAtCursor(SerializedProperty prop, string text)
+        {
+            prop.stringValue += text;
+            prop.serializedObject.ApplyModifiedProperties();
+            dirty = true;
         }
 
         private List<(Type type, DataEntryTypeAttribute attr)> CollectDataEntryTypesRaw()

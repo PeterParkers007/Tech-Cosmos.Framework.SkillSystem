@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using TechCosmos.SkillSystem.Runtime;
+
 namespace TechCosmos.SkillSystem.Editor
 {
     [CustomEditor(typeof(SkillDataSO), true)]
@@ -15,6 +16,7 @@ namespace TechCosmos.SkillSystem.Editor
         private Dictionary<string, List<SerializedProperty>> groupedProperties;
         private List<SerializedProperty> ungroupedProperties;
         private Dictionary<string, bool> foldoutStates = new();
+        private bool dirty;
 
         void OnEnable()
         {
@@ -331,78 +333,103 @@ namespace TechCosmos.SkillSystem.Editor
             serializedObject.ApplyModifiedProperties();
         }
 
+        // ===== 核心：数据条目绘制 =====
         private void DrawDataEntry(SerializedProperty element, int index)
         {
             var keyProp = element.FindPropertyRelative("key");
             var containerProp = element.FindPropertyRelative("valueContainer");
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // 第一行：Key + 类型标签 + 操作按钮
             EditorGUILayout.BeginHorizontal();
 
-            EditorGUILayout.LabelField("Key", GUILayout.Width(25));
-            keyProp.stringValue = EditorGUILayout.TextField(keyProp.stringValue, GUILayout.Width(120));
+            keyProp.stringValue = EditorGUILayout.TextField(keyProp.stringValue, GUILayout.Width(140));
 
             if (containerProp.managedReferenceValue != null)
             {
-                string tl = containerProp.managedReferenceValue.GetType().Name switch
+                string typeLabel = containerProp.managedReferenceValue.GetType().Name switch
                 {
                     nameof(FloatValue) => "Float",
                     nameof(IntValue) => "Int",
                     nameof(StringValue) => "Str",
                     nameof(BoolValue) => "Bool",
                     nameof(FormulaValue) => "Formula",
-                    nameof(SerializableValue) => GetStl(containerProp),
+                    nameof(SerializableValue) => GetTypeLabel(containerProp),
                     _ => "Obj"
                 };
-                var c = GUI.color;
-                GUI.color = tl switch { "Float" => new Color(0.3f, 0.7f, 1f), "Int" => new Color(0.3f, 1f, 0.5f), "Str" => new Color(1f, 0.8f, 0.3f), "Bool" => new Color(1f, 0.5f, 0.5f), "Formula" => new Color(1f, 0.4f, 1f), _ => Color.white };
-                EditorGUILayout.LabelField(tl, EditorStyles.miniLabel, GUILayout.Width(50));
-                GUI.color = c;
-                if (GUILayout.Button("...", GUILayout.Width(25))) ShowTypeSwitchMenu(containerProp);
+
+                var originalColor = GUI.color;
+                GUI.color = typeLabel switch
+                {
+                    "Float" => new Color(0.3f, 0.7f, 1f),
+                    "Int" => new Color(0.3f, 1f, 0.5f),
+                    "Str" => new Color(1f, 0.8f, 0.3f),
+                    "Bool" => new Color(1f, 0.5f, 0.5f),
+                    "Formula" => new Color(1f, 0.4f, 1f),
+                    _ => Color.white
+                };
+                EditorGUILayout.LabelField(typeLabel, EditorStyles.miniLabel, GUILayout.Width(60));
+                GUI.color = originalColor;
+
+                if (GUILayout.Button("...", GUILayout.Width(25)))
+                    ShowTypeMenu(containerProp);
             }
 
             GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
-            if (GUILayout.Button("✕", GUILayout.Width(25), GUILayout.Height(16)))
+            if (GUILayout.Button("✕", GUILayout.Width(25), GUILayout.Height(18)))
             {
                 serializedDataProp.DeleteArrayElementAtIndex(index);
+                dirty = true;
                 GUI.backgroundColor = Color.white;
                 EditorGUILayout.EndHorizontal();
                 EditorGUILayout.EndVertical();
                 return;
             }
             GUI.backgroundColor = Color.white;
+
             EditorGUILayout.EndHorizontal();
 
+            // 值编辑区域
             if (containerProp.managedReferenceValue != null)
-                DrawValueInput(containerProp);
-            else
-                EditorGUILayout.HelpBox("点击 ... 选择类型", MessageType.None);
+            {
+                EditorGUI.indentLevel++;
+
+                if (containerProp.managedReferenceValue is FormulaValue)
+                {
+                    DrawFormulaExpanded(containerProp);
+                }
+                else
+                {
+                    var valueProp = containerProp.FindPropertyRelative("value");
+                    switch (containerProp.managedReferenceValue)
+                    {
+                        case FloatValue when valueProp != null:
+                            valueProp.floatValue = EditorGUILayout.FloatField("值", valueProp.floatValue);
+                            break;
+                        case IntValue when valueProp != null:
+                            valueProp.intValue = EditorGUILayout.IntField("值", valueProp.intValue);
+                            break;
+                        case StringValue when valueProp != null:
+                            valueProp.stringValue = EditorGUILayout.TextField("值", valueProp.stringValue);
+                            break;
+                        case BoolValue when valueProp != null:
+                            valueProp.boolValue = EditorGUILayout.Toggle("值", valueProp.boolValue);
+                            break;
+                        case SerializableValue when valueProp != null:
+                            EditorGUILayout.PropertyField(valueProp, new GUIContent("值"), true);
+                            break;
+                    }
+                }
+
+                EditorGUI.indentLevel--;
+            }
 
             EditorGUILayout.EndVertical();
         }
 
-        private string GetStl(SerializedProperty cp)
-        {
-            var vp = cp.FindPropertyRelative("value");
-            return vp?.managedReferenceValue?.GetType().Name ?? "Obj";
-        }
-
-        private void DrawValueInput(SerializedProperty containerProp)
-        {
-            var valueProp = containerProp.FindPropertyRelative("value");
-            switch (containerProp.managedReferenceValue)
-            {
-                case FloatValue: if (valueProp != null) valueProp.floatValue = EditorGUILayout.FloatField("值", valueProp.floatValue); break;
-                case IntValue: if (valueProp != null) valueProp.intValue = EditorGUILayout.IntField("值", valueProp.intValue); break;
-                case StringValue: if (valueProp != null) valueProp.stringValue = EditorGUILayout.TextField("值", valueProp.stringValue); break;
-                case BoolValue: if (valueProp != null) valueProp.boolValue = EditorGUILayout.Toggle("值", valueProp.boolValue); break;
-                case FormulaValue: DrawFormulaInput(containerProp); break;
-                case SerializableValue: if (valueProp != null) EditorGUILayout.PropertyField(valueProp, new GUIContent("值"), true); break;
-                default: EditorGUILayout.LabelField("值", containerProp.managedReferenceValue?.GetType().Name ?? "null"); break;
-            }
-        }
-
-        private void DrawFormulaInput(SerializedProperty containerProp)
+        // ===== 展开的公式编辑 =====
+        private void DrawFormulaExpanded(SerializedProperty containerProp)
         {
             var ft = containerProp.FindPropertyRelative("formulaType");
             var sv = containerProp.FindPropertyRelative("staticValue");
@@ -412,29 +439,49 @@ namespace TechCosmos.SkillSystem.Editor
             var op = containerProp.FindPropertyRelative("operatorType");
             var cf = containerProp.FindPropertyRelative("customFormula");
 
-            EditorGUI.indentLevel++;
             EditorGUILayout.PropertyField(ft, new GUIContent("公式类型"));
-            switch ((FormulaValue.FormulaType)ft.enumValueIndex)
+
+            var type = (FormulaValue.FormulaType)ft.enumValueIndex;
+
+            switch (type)
             {
                 case FormulaValue.FormulaType.Static:
-                    sv.floatValue = EditorGUILayout.FloatField("静态值", sv.floatValue); break;
+                    sv.floatValue = EditorGUILayout.FloatField("静态值", sv.floatValue);
+                    break;
+
                 case FormulaValue.FormulaType.Reference:
-                    DrawReferenceFieldWithPreview(rp);
+                    EditorGUILayout.BeginHorizontal();
+                    rp.stringValue = EditorGUILayout.TextField("引用路径", rp.stringValue);
+                    if (GUILayout.Button("▼", GUILayout.Width(25)))
+                        ShowReferencePathMenu(rp);
+                    EditorGUILayout.EndHorizontal();
+
                     var ops = new[] { "Multiply", "Add", "Set" };
-                    var opn = new[] { "× 乘", "+ 加", "= 设" };
-                    int oi = Array.IndexOf(ops, op.stringValue); if (oi < 0) oi = 0;
-                    op.stringValue = ops[EditorGUILayout.Popup("操作符", oi, opn)];
+                    var opNames = new[] { "× 乘", "+ 加", "= 设" };
+                    int opIdx = System.Array.IndexOf(ops, op.stringValue);
+                    if (opIdx < 0) opIdx = 0;
+                    opIdx = EditorGUILayout.Popup("操作符", opIdx, opNames);
+                    op.stringValue = ops[opIdx];
+
                     mp.floatValue = EditorGUILayout.FloatField("乘数", mp.floatValue);
                     off.floatValue = EditorGUILayout.FloatField("偏移", off.floatValue);
                     break;
+
                 case FormulaValue.FormulaType.Expression:
-                    DrawReferenceFieldWithPreview(rp);
+                    EditorGUILayout.BeginHorizontal();
+                    rp.stringValue = EditorGUILayout.TextField("引用路径", rp.stringValue);
+                    if (GUILayout.Button("▼", GUILayout.Width(25)))
+                        ShowReferencePathMenu(rp);
+                    EditorGUILayout.EndHorizontal();
+
                     mp.floatValue = EditorGUILayout.FloatField("乘数", mp.floatValue);
                     off.floatValue = EditorGUILayout.FloatField("偏移", off.floatValue);
                     break;
+
                 case FormulaValue.FormulaType.Custom:
                     EditorGUILayout.HelpBox("变量: caster, target\n示例: caster.Runtime.Attack * 1.5", MessageType.Info);
                     cf.stringValue = EditorGUILayout.TextField("公式", cf.stringValue);
+
                     EditorGUILayout.BeginHorizontal();
                     if (GUILayout.Button("caster.", EditorStyles.miniButtonLeft)) cf.stringValue += "caster.";
                     if (GUILayout.Button("target.", EditorStyles.miniButtonMid)) cf.stringValue += "target.";
@@ -443,66 +490,10 @@ namespace TechCosmos.SkillSystem.Editor
                     EditorGUILayout.EndHorizontal();
                     break;
             }
-            EditorGUI.indentLevel--;
         }
 
-        private void DrawReferenceFieldWithPreview(SerializedProperty pathProp)
-        {
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("引用路径", GUILayout.Width(60));
-            pathProp.stringValue = EditorGUILayout.TextField(pathProp.stringValue);
-            if (GUILayout.Button("▼", GUILayout.Width(25))) ShowReferencePathMenu(pathProp);
-            EditorGUILayout.EndHorizontal();
-        }
-
-        private void ShowReferencePathMenu(SerializedProperty pathProp)
-        {
-            var menu = new GenericMenu();
-            var so = target as SkillDataSO;
-            var ut = so?.GetUnitType();
-            var pp = pathProp.propertyPath;
-            var to = pathProp.serializedObject.targetObject;
-            if (ut != null)
-            {
-                CollectFieldsForMenu(ut, "caster", menu, pp, to);
-                menu.AddSeparator("");
-                CollectFieldsForMenu(ut, "target", menu, pp, to);
-            }
-            menu.AddSeparator("");
-            menu.AddItem(new GUIContent("清除路径"), false, () =>
-            {
-                var s = new SerializedObject(to); var sp = s.FindProperty(pp); if (sp != null) { sp.stringValue = ""; s.ApplyModifiedProperties(); }
-            });
-            menu.ShowAsContext();
-        }
-
-        private void CollectFieldsForMenu(Type ut, string prefix, GenericMenu menu, string pp, UnityEngine.Object to)
-        {
-            bool any = false;
-            foreach (var f in ut.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
-            {
-                var attr = f.GetCustomAttribute<SkillDataFieldAttribute>(); if (attr == null) continue;
-                var dn = attr.DisplayName ?? ObjectNames.NicifyVariableName(f.Name);
-                if (ShouldFlattenInMenu(f.FieldType))
-                    foreach (var sf in f.FieldType.GetFields(BindingFlags.Public | BindingFlags.Instance))
-                    {
-                        any = true; var cap = $"{prefix}.{f.Name}.{sf.Name}";
-                        menu.AddItem(new GUIContent($"{prefix}/{dn}/{ObjectNames.NicifyVariableName(sf.Name)}"), false, () => { var s = new SerializedObject(to); var sp = s.FindProperty(pp); if (sp != null) { sp.stringValue = cap; s.ApplyModifiedProperties(); } });
-                    }
-                else if (IsSimpleType(f.FieldType))
-                {
-                    any = true; var cap = $"{prefix}.{f.Name}";
-                    menu.AddItem(new GUIContent($"{prefix}/{dn}"), false, () => { var s = new SerializedObject(to); var sp = s.FindProperty(pp); if (sp != null) { sp.stringValue = cap; s.ApplyModifiedProperties(); } });
-                }
-            }
-            if (!any) menu.AddDisabledItem(new GUIContent($"{prefix}/(无)"));
-        }
-
-        private bool ShouldFlattenInMenu(Type t) => !t.IsPrimitive && t != typeof(string) && !t.IsEnum && !t.IsArray && !t.IsGenericType && !typeof(UnityEngine.Object).IsAssignableFrom(t) && t.IsSerializable;
-
-        private bool IsSimpleType(Type t) => t.IsPrimitive || t == typeof(string) || t == typeof(float) || t == typeof(int) || t == typeof(bool) || t == typeof(double) || t.IsEnum || t == typeof(Vector2) || t == typeof(Vector3);
-
-        private void ShowTypeSwitchMenu(SerializedProperty containerProp)
+        // ===== 缺少的方法 =====
+        private void ShowTypeMenu(SerializedProperty containerProp)
         {
             var menu = new GenericMenu();
             menu.AddItem(new GUIContent("Float"), false, () => Switch(containerProp, new FloatValue()));
@@ -533,35 +524,80 @@ namespace TechCosmos.SkillSystem.Editor
             }
             menu.ShowAsContext();
         }
-        private void DrawBaseInfo()
+
+        private string GetTypeLabel(SerializedProperty cp)
         {
-            EditorGUILayout.LabelField("基础信息", EditorStyles.boldLabel);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillType"), new GUIContent("技能类型"));
-            DrawTriggerEventField();
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillName"), new GUIContent("技能名称"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillDescription"), new GUIContent("技能描述"));
-
-            EditorGUILayout.EndVertical();
+            var vp = cp.FindPropertyRelative("value");
+            return vp?.managedReferenceValue?.GetType().Name ?? "Obj";
         }
 
-        private void DrawTriggerEventField()
+        private void Switch(SerializedProperty cp, ValueContainer vc)
         {
-            var triggerProp = serializedObject.FindProperty("TriggerEvent");
-            var enumType = GetTriggerEventEnumType();
-
-            if (enumType != null && Enum.TryParse(enumType, triggerProp.stringValue, out var enumVal))
-            {
-                var newVal = EditorGUILayout.EnumPopup("触发事件", (Enum)enumVal);
-                if (newVal.ToString() != triggerProp.stringValue)
-                    triggerProp.stringValue = newVal.ToString();
-            }
-            else
-            {
-                triggerProp.stringValue = EditorGUILayout.TextField("触发事件", triggerProp.stringValue);
-            }
+            cp.managedReferenceValue = vc;
+            cp.serializedObject.ApplyModifiedProperties();
         }
+
+        private void ShowReferencePathMenu(SerializedProperty pathProp)
+        {
+            var menu = new GenericMenu();
+            var so = target as SkillDataSO;
+            var ut = so?.GetUnitType();
+            var pp = pathProp.propertyPath;
+            var to = pathProp.serializedObject.targetObject;
+            if (ut != null)
+            {
+                CollectFieldsForMenu(ut, "caster", menu, pp, to);
+                menu.AddSeparator("");
+                CollectFieldsForMenu(ut, "target", menu, pp, to);
+            }
+            menu.AddSeparator("");
+            menu.AddItem(new GUIContent("清除路径"), false, () =>
+            {
+                var s = new SerializedObject(to);
+                var sp = s.FindProperty(pp);
+                if (sp != null) { sp.stringValue = ""; s.ApplyModifiedProperties(); }
+            });
+            menu.ShowAsContext();
+        }
+
+        private void CollectFieldsForMenu(Type ut, string prefix, GenericMenu menu, string pp, UnityEngine.Object to)
+        {
+            bool any = false;
+            foreach (var f in ut.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                var attr = f.GetCustomAttribute<SkillDataFieldAttribute>();
+                if (attr == null) continue;
+                var dn = attr.DisplayName ?? ObjectNames.NicifyVariableName(f.Name);
+                if (ShouldFlattenInMenu(f.FieldType))
+                    foreach (var sf in f.FieldType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        any = true;
+                        var cap = $"{prefix}.{f.Name}.{sf.Name}";
+                        menu.AddItem(new GUIContent($"{prefix}/{dn}/{ObjectNames.NicifyVariableName(sf.Name)}"), false, () =>
+                        {
+                            var s = new SerializedObject(to);
+                            var sp = s.FindProperty(pp);
+                            if (sp != null) { sp.stringValue = cap; s.ApplyModifiedProperties(); }
+                        });
+                    }
+                else if (IsSimpleType(f.FieldType))
+                {
+                    any = true;
+                    var cap = $"{prefix}.{f.Name}";
+                    menu.AddItem(new GUIContent($"{prefix}/{dn}"), false, () =>
+                    {
+                        var s = new SerializedObject(to);
+                        var sp = s.FindProperty(pp);
+                        if (sp != null) { sp.stringValue = cap; s.ApplyModifiedProperties(); }
+                    });
+                }
+            }
+            if (!any) menu.AddDisabledItem(new GUIContent($"{prefix}/(无)"));
+        }
+
+        private bool ShouldFlattenInMenu(Type t) => !t.IsPrimitive && t != typeof(string) && !t.IsEnum && !t.IsArray && !t.IsGenericType && !typeof(UnityEngine.Object).IsAssignableFrom(t) && t.IsSerializable;
+
+        private bool IsSimpleType(Type t) => t.IsPrimitive || t == typeof(string) || t == typeof(float) || t == typeof(int) || t == typeof(bool) || t == typeof(double) || t.IsEnum || t == typeof(Vector2) || t == typeof(Vector3);
 
         private static Type GetTriggerEventEnumType()
         {
@@ -572,7 +608,6 @@ namespace TechCosmos.SkillSystem.Editor
             }
             return null;
         }
-        private void Switch(SerializedProperty cp, ValueContainer vc) { cp.managedReferenceValue = vc; cp.serializedObject.ApplyModifiedProperties(); }
 
         private List<(Type type, DataEntryTypeAttribute attr)> CollectDataEntryTypes()
         {
