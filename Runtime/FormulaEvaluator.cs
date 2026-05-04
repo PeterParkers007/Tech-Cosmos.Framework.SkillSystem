@@ -9,13 +9,6 @@ namespace TechCosmos.SkillSystem.Runtime
 {
     public static class FormulaEvaluator
     {
-        // 缓存：Type → (成员名 → 访问器委托)
-        private static readonly Dictionary<Type, Dictionary<string, MemberAccessor>> _accessorCache
-            = new Dictionary<Type, Dictionary<string, MemberAccessor>>();
-
-        // 成员访问器委托：传入对象，返回值
-        private delegate float MemberAccessor(object obj);
-
         public static float Evaluate<T>(SkillContext<T> context, string formula) where T : class, IUnit<T>
         {
             if (string.IsNullOrEmpty(formula))
@@ -80,115 +73,49 @@ namespace TechCosmos.SkillSystem.Runtime
                 if (obj == null) return 0f;
 
                 var type = obj.GetType();
-                var accessor = GetOrCreateAccessor(type, part);
 
-                if (accessor != null)
-                    obj = accessor(obj);
-                else
-                    return 0f;
+                // 查找属性
+                var property = type.GetProperty(part, BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+                if (property != null && property.CanRead)
+                {
+                    obj = property.GetValue(obj);
+                    continue;
+                }
+
+                // 查找字段
+                var field = type.GetField(part, BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    obj = field.GetValue(obj);
+                    continue;
+                }
+
+                return 0f;
             }
 
+            // 只在最终结果时转 float
             return obj switch
             {
                 float f => f,
                 int i => i,
                 double d => (float)d,
                 bool b => b ? 1f : 0f,
+                long l => l,
+                short s => s,
+                byte bt => bt,
                 _ => 0f
             };
         }
 
-        /// <summary>
-        /// 获取或创建成员访问器（带缓存）
-        /// </summary>
-        private static MemberAccessor GetOrCreateAccessor(Type type, string memberName)
-        {
-            // 检查缓存
-            if (!_accessorCache.TryGetValue(type, out var memberCache))
-            {
-                memberCache = new Dictionary<string, MemberAccessor>();
-                _accessorCache[type] = memberCache;
-            }
+        // ===== 以下为表达式求值（括号、运算符优先级），与之前一致 =====
 
-            if (memberCache.TryGetValue(memberName, out var cachedAccessor))
-                return cachedAccessor;
-
-            // 创建访问器
-            var accessor = CreateAccessor(type, memberName);
-            memberCache[memberName] = accessor;
-            return accessor;
-        }
-
-        /// <summary>
-        /// 为指定类型的指定成员创建访问器委托
-        /// </summary>
-        private static MemberAccessor CreateAccessor(Type type, string memberName)
-        {
-            // 查找属性
-            var property = type.GetProperty(memberName,
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
-            if (property != null && property.CanRead)
-            {
-                var getMethod = property.GetGetMethod(true);
-                if (getMethod != null)
-                {
-                    return obj =>
-                    {
-                        var value = getMethod.Invoke(obj, null);
-                        return ConvertToFloat(value);
-                    };
-                }
-            }
-
-            // 查找字段
-            var field = type.GetField(memberName,
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
-            if (field != null)
-            {
-                return obj =>
-                {
-                    var value = field.GetValue(obj);
-                    return ConvertToFloat(value);
-                };
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// 将任意值转换为 float
-        /// </summary>
-        private static float ConvertToFloat(object value)
-        {
-            if (value == null) return 0f;
-
-            if (value is float f) return f;
-            if (value is int i) return i;
-            if (value is double d) return (float)d;
-            if (value is bool b) return b ? 1f : 0f;
-            if (value is long l) return l;
-            if (value is short s) return s;
-            if (value is byte bt) return bt;
-            if (value is IConvertible convertible)
-                return convertible.ToSingle(CultureInfo.InvariantCulture);
-
-            return 0f;
-        }
-
-        /// <summary>
-        /// 完整表达式求值：支持括号、标准运算符优先级
-        /// </summary>
         private static float EvaluateExpression(string expression)
         {
             if (string.IsNullOrWhiteSpace(expression))
                 return 0f;
 
             expression = expression.Replace(" ", "");
-
-            // 第一步：处理括号（递归）
             expression = ResolveParentheses(expression);
-
-            // 第二步：按优先级处理运算符
             return EvaluateNoParentheses(expression);
         }
 
@@ -209,7 +136,6 @@ namespace TechCosmos.SkillSystem.Runtime
                 string innerStr = innerResult.ToString(CultureInfo.InvariantCulture);
 
                 expr = expr.Substring(0, start) + innerStr + expr.Substring(end + 1);
-
                 start = expr.LastIndexOf('(');
             }
 
@@ -236,9 +162,7 @@ namespace TechCosmos.SkillSystem.Runtime
             if (string.IsNullOrEmpty(expr)) return expr;
 
             if (expr[0] == '-')
-            {
                 expr = "0" + expr;
-            }
 
             expr = expr.Replace("(-", "(0-");
 
@@ -252,11 +176,8 @@ namespace TechCosmos.SkillSystem.Runtime
             for (int i = 0; i < tokens.Count; i++)
             {
                 string token = tokens[i];
-
                 if (token.Contains("*") || token.Contains("/"))
-                {
                     tokens[i] = EvaluateMulDivToken(token);
-                }
             }
 
             return string.Join("", tokens);
@@ -272,13 +193,9 @@ namespace TechCosmos.SkillSystem.Runtime
             {
                 string val = match.Value;
                 if (val == "*" || val == "/")
-                {
                     operators.Add(val[0]);
-                }
                 else if (float.TryParse(val, NumberStyles.Float | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out float num))
-                {
                     numbers.Add(num);
-                }
             }
 
             if (numbers.Count == 0) return token;
