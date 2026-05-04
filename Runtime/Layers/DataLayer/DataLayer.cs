@@ -27,17 +27,11 @@ namespace TechCosmos.SkillSystem.Runtime
                 return ResolveFormula<TValue>(formulaVal, context);
             }
 
-            // 字符串公式
-            if (value is string formulaStr && formulaStr.Contains("."))
-            {
-                float result = FormulaEvaluator.Evaluate<T>(context, formulaStr);
-                return (TValue)(object)result;
-            }
-
             // 委托公式
             if (value is Func<SkillContext<T>, TValue> func)
                 return func(context);
 
+            // 直接类型匹配
             if (value is TValue typedValue)
                 return typedValue;
 

@@ -1,6 +1,7 @@
 ﻿// OR 条件（任意条件满足）
 using System.Collections.Generic;
 using System.Linq;
+
 namespace TechCosmos.SkillSystem.Runtime
 {
     public class OrCondition<T> : Condition<T> where T : class, IUnit<T>
@@ -12,11 +13,25 @@ namespace TechCosmos.SkillSystem.Runtime
             _conditions = conditions.Where(c => c != null).ToList();
         }
 
+        public OrCondition(Condition<T> a, Condition<T> b)
+        {
+            _conditions = new List<Condition<T>>(2);
+            if (a != null) _conditions.Add(a);
+            if (b != null) _conditions.Add(b);
+        }
+
+        public OrCondition(Condition<T> a, Condition<T> b, Condition<T> c)
+        {
+            _conditions = new List<Condition<T>>(3);
+            if (a != null) _conditions.Add(a);
+            if (b != null) _conditions.Add(b);
+            if (c != null) _conditions.Add(c);
+        }
+
         public override bool IsEligible(SkillContext<T> skillContext, IDataLayer<T> dataLayer)
         {
             if (_conditions.Count == 0) return true;
 
-            // 优化：for循环代替LINQ
             var conditions = _conditions;
             int count = conditions.Count;
 
@@ -27,10 +42,26 @@ namespace TechCosmos.SkillSystem.Runtime
             }
             return false;
         }
+
         public void Reinitialize(params Condition<T>[] conditions)
         {
             _conditions.Clear();
             _conditions.AddRange(conditions.Where(c => c != null));
+        }
+
+        public void Reinitialize(Condition<T> a, Condition<T> b)
+        {
+            _conditions.Clear();
+            if (a != null) _conditions.Add(a);
+            if (b != null) _conditions.Add(b);
+        }
+
+        public void Reinitialize(Condition<T> a, Condition<T> b, Condition<T> c)
+        {
+            _conditions.Clear();
+            if (a != null) _conditions.Add(a);
+            if (b != null) _conditions.Add(b);
+            if (c != null) _conditions.Add(c);
         }
 
         public void Clear()

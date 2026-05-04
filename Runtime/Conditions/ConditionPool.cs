@@ -8,7 +8,8 @@ namespace TechCosmos.SkillSystem.Runtime
         private static readonly Stack<OrCondition<T>> _orPool = new();
         private static readonly Stack<NotCondition<T>> _notPool = new();
 
-        public static Condition<T> RentAnd(params Condition<T>[] conditions)  // 改这里！
+        // ===== And =====
+        public static Condition<T> RentAnd(params Condition<T>[] conditions)
         {
             if (_andPool.TryPop(out var condition))
             {
@@ -18,7 +19,28 @@ namespace TechCosmos.SkillSystem.Runtime
             return new AndCondition<T>(conditions);
         }
 
-        public static Condition<T> RentOr(params Condition<T>[] conditions)  // 这个对了
+        public static Condition<T> RentAnd(Condition<T> a, Condition<T> b)
+        {
+            if (_andPool.TryPop(out var condition))
+            {
+                condition.Reinitialize(a, b);
+                return condition;
+            }
+            return new AndCondition<T>(a, b);
+        }
+
+        public static Condition<T> RentAnd(Condition<T> a, Condition<T> b, Condition<T> c)
+        {
+            if (_andPool.TryPop(out var condition))
+            {
+                condition.Reinitialize(a, b, c);
+                return condition;
+            }
+            return new AndCondition<T>(a, b, c);
+        }
+
+        // ===== Or =====
+        public static Condition<T> RentOr(params Condition<T>[] conditions)
         {
             if (_orPool.TryPop(out var condition))
             {
@@ -28,7 +50,28 @@ namespace TechCosmos.SkillSystem.Runtime
             return new OrCondition<T>(conditions);
         }
 
-        public static Condition<T> RentNot(Condition<T> condition)  // 这个对了
+        public static Condition<T> RentOr(Condition<T> a, Condition<T> b)
+        {
+            if (_orPool.TryPop(out var condition))
+            {
+                condition.Reinitialize(a, b);
+                return condition;
+            }
+            return new OrCondition<T>(a, b);
+        }
+
+        public static Condition<T> RentOr(Condition<T> a, Condition<T> b, Condition<T> c)
+        {
+            if (_orPool.TryPop(out var condition))
+            {
+                condition.Reinitialize(a, b, c);
+                return condition;
+            }
+            return new OrCondition<T>(a, b, c);
+        }
+
+        // ===== Not =====
+        public static Condition<T> RentNot(Condition<T> condition)
         {
             if (_notPool.TryPop(out var notCondition))
             {
@@ -38,6 +81,7 @@ namespace TechCosmos.SkillSystem.Runtime
             return new NotCondition<T>(condition);
         }
 
+        // ===== 归还 =====
         public static void Return(AndCondition<T> condition)
         {
             condition.Clear();
