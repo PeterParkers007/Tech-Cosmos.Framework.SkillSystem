@@ -1098,14 +1098,75 @@ namespace TechCosmos.SkillSystem.Editor
 
                 if (IsSimpleType(f.FieldType))
                 {
+                    // 简单类型：直接添加路径
                     paths.Add(prefix + f.Name);
                 }
                 else if (ShouldFlattenInMenu(f.FieldType))
                 {
-                    paths.AddRange(CollectAllFieldPaths(f.FieldType, prefix + f.Name + ".", visited));
+                    // 标记了 [SkillDataField] 的复杂类型：递归展开它的子字段
+                    // 这些子字段不再需要 [SkillDataField]
+                    paths.AddRange(CollectSubFields(f.FieldType, prefix + f.Name + ".", new HashSet<Type>()));
                 }
             }
             return paths;
+        }
+
+        // ===== 展开复杂类型的所有公开字段（不需要 [SkillDataField]） =====
+        private List<string> CollectSubFields(Type type, string prefix, HashSet<Type> visited)
+        {
+            var paths = new List<string>();
+            if (type == null || !visited.Add(type)) return paths;
+
+            foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                // 跳过 const/static/readonly
+                if (f.IsInitOnly || f.IsLiteral || f.IsStatic) continue;
+                // 跳过 Obsolete
+                if (f.GetCustomAttribute<ObsoleteAttribute>() != null) continue;
+
+                if (IsSimpleType(f.FieldType))
+                {
+                    paths.Add(prefix + f.Name);
+                }
+                else if (ShouldFlattenSubField(f.FieldType))
+                {
+                    // 继续递归展开
+                    paths.AddRange(CollectSubFields(f.FieldType, prefix + f.Name + ".", visited));
+                }
+            }
+
+            // 也收集属性
+            foreach (var p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!p.CanRead) continue;
+                if (p.GetCustomAttribute<ObsoleteAttribute>() != null) continue;
+
+                if (IsSimpleType(p.PropertyType))
+                {
+                    paths.Add(prefix + p.Name);
+                }
+                else if (ShouldFlattenSubField(p.PropertyType))
+                {
+                    paths.AddRange(CollectSubFields(p.PropertyType, prefix + p.Name + ".", visited));
+                }
+            }
+
+            return paths;
+        }
+
+        // ===== 子字段展开判断（比 ShouldFlattenInMenu 宽松） =====
+        private bool ShouldFlattenSubField(Type t)
+        {
+            if (t.IsPrimitive) return false;
+            if (t == typeof(string)) return false;
+            if (t.IsEnum) return false;
+            if (t.IsArray) return false;
+            if (t.IsGenericType) return false; // List<> Dictionary<> 等不展开
+            if (typeof(UnityEngine.Object).IsAssignableFrom(t)) return false;
+            if (t.Namespace != null && t.Namespace.StartsWith("UnityEngine")) return false;
+
+            // 可序列化的自定义类型才展开
+            return t.IsSerializable && !t.IsAbstract;
         }
 
         // ===== 在光标位置插入文本 =====
