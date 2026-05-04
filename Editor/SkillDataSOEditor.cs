@@ -333,7 +333,6 @@ namespace TechCosmos.SkillSystem.Editor
             serializedObject.ApplyModifiedProperties();
         }
 
-        // ===== 核心：数据条目绘制 =====
         private void DrawDataEntry(SerializedProperty element, int index)
         {
             var keyProp = element.FindPropertyRelative("key");
@@ -341,7 +340,6 @@ namespace TechCosmos.SkillSystem.Editor
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-            // 第一行：Key + 类型标签 + 操作按钮
             EditorGUILayout.BeginHorizontal();
 
             keyProp.stringValue = EditorGUILayout.TextField(keyProp.stringValue, GUILayout.Width(140));
@@ -390,7 +388,6 @@ namespace TechCosmos.SkillSystem.Editor
 
             EditorGUILayout.EndHorizontal();
 
-            // 值编辑区域
             if (containerProp.managedReferenceValue != null)
             {
                 EditorGUI.indentLevel++;
@@ -428,7 +425,6 @@ namespace TechCosmos.SkillSystem.Editor
             EditorGUILayout.EndVertical();
         }
 
-        // ===== 展开的公式编辑 =====
         private void DrawFormulaExpanded(SerializedProperty containerProp)
         {
             var ft = containerProp.FindPropertyRelative("formulaType");
@@ -492,7 +488,6 @@ namespace TechCosmos.SkillSystem.Editor
             }
         }
 
-        // ===== 缺少的方法 =====
         private void ShowTypeMenu(SerializedProperty containerProp)
         {
             var menu = new GenericMenu();
@@ -544,12 +539,106 @@ namespace TechCosmos.SkillSystem.Editor
             var ut = so?.GetUnitType();
             var pp = pathProp.propertyPath;
             var to = pathProp.serializedObject.targetObject;
-            if (ut != null)
+
+            if (ut == null)
             {
-                CollectFieldsForMenu(ut, "caster", menu, pp, to);
+                menu.AddDisabledItem(new GUIContent("无法获取 Unit 类型"));
                 menu.AddSeparator("");
-                CollectFieldsForMenu(ut, "target", menu, pp, to);
+                menu.AddItem(new GUIContent("清除路径"), false, () =>
+                {
+                    var s = new SerializedObject(to);
+                    var sp = s.FindProperty(pp);
+                    if (sp != null) { sp.stringValue = ""; s.ApplyModifiedProperties(); }
+                });
+                menu.ShowAsContext();
+                return;
             }
+
+            var casterPaths = CollectAllFieldPaths(ut, "caster.", new HashSet<Type>()).OrderBy(p => p).ToList();
+
+            if (casterPaths.Count == 0)
+            {
+                menu.AddDisabledItem(new GUIContent("未找到可用字段"));
+            }
+            else
+            {
+                var groups = casterPaths
+                    .Select(p => new
+                    {
+                        FullPath = p,
+                        ShortPath = p.Substring("caster.".Length),
+                        Category = p.Substring("caster.".Length).Split('.')[0]
+                    })
+                    .GroupBy(x => x.Category)
+                    .OrderBy(g => g.Key);
+
+                // caster
+                foreach (var group in groups)
+                {
+                    var categoryName = ObjectNames.NicifyVariableName(group.Key);
+                    var items = group.ToList();
+
+                    if (items.Count == 1)
+                    {
+                        var item = items[0];
+                        menu.AddItem(new GUIContent($"caster/{categoryName}"), false, () =>
+                        {
+                            var s = new SerializedObject(to);
+                            var sp = s.FindProperty(pp);
+                            if (sp != null) { sp.stringValue = item.FullPath; s.ApplyModifiedProperties(); }
+                        });
+                    }
+                    else
+                    {
+                        foreach (var item in items)
+                        {
+                            var subPath = item.ShortPath.Substring(item.Category.Length + 1);
+                            var displayName = ObjectNames.NicifyVariableName(subPath.Replace(".", "/"));
+                            menu.AddItem(new GUIContent($"caster/{categoryName}/{displayName}"), false, () =>
+                            {
+                                var s = new SerializedObject(to);
+                                var sp = s.FindProperty(pp);
+                                if (sp != null) { sp.stringValue = item.FullPath; s.ApplyModifiedProperties(); }
+                            });
+                        }
+                    }
+                }
+
+                // target
+                foreach (var group in groups)
+                {
+                    var categoryName = ObjectNames.NicifyVariableName(group.Key);
+                    var items = group.ToList();
+
+                    if (items.Count == 1)
+                    {
+                        var item = items[0];
+                        var targetPath = "target." + item.ShortPath;
+                        menu.AddItem(new GUIContent($"target/{categoryName}"), false, () =>
+                        {
+                            var s = new SerializedObject(to);
+                            var sp = s.FindProperty(pp);
+                            if (sp != null) { sp.stringValue = targetPath; s.ApplyModifiedProperties(); }
+                        });
+                    }
+                    else
+                    {
+                        foreach (var item in items)
+                        {
+                            var targetPath = "target." + item.ShortPath;
+                            var subPath = item.ShortPath.Substring(item.Category.Length + 1);
+                            var displayName = ObjectNames.NicifyVariableName(subPath.Replace(".", "/"));
+                            menu.AddItem(new GUIContent($"target/{categoryName}/{displayName}"), false, () =>
+                            {
+                                var s = new SerializedObject(to);
+                                var sp = s.FindProperty(pp);
+                                if (sp != null) { sp.stringValue = targetPath; s.ApplyModifiedProperties(); }
+                            });
+                        }
+                    }
+                }
+            }
+
             menu.AddSeparator("");
             menu.AddItem(new GUIContent("清除路径"), false, () =>
             {
@@ -557,45 +646,81 @@ namespace TechCosmos.SkillSystem.Editor
                 var sp = s.FindProperty(pp);
                 if (sp != null) { sp.stringValue = ""; s.ApplyModifiedProperties(); }
             });
+
             menu.ShowAsContext();
         }
 
-        private void CollectFieldsForMenu(Type ut, string prefix, GenericMenu menu, string pp, UnityEngine.Object to)
+        private List<string> CollectAllFieldPaths(Type type, string prefix, HashSet<Type> visited)
         {
-            bool any = false;
-            foreach (var f in ut.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            var paths = new List<string>();
+            if (type == null || !visited.Add(type)) return paths;
+
+            foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 var attr = f.GetCustomAttribute<SkillDataFieldAttribute>();
                 if (attr == null) continue;
-                var dn = attr.DisplayName ?? ObjectNames.NicifyVariableName(f.Name);
-                if (ShouldFlattenInMenu(f.FieldType))
-                    foreach (var sf in f.FieldType.GetFields(BindingFlags.Public | BindingFlags.Instance))
-                    {
-                        any = true;
-                        var cap = $"{prefix}.{f.Name}.{sf.Name}";
-                        menu.AddItem(new GUIContent($"{prefix}/{dn}/{ObjectNames.NicifyVariableName(sf.Name)}"), false, () =>
-                        {
-                            var s = new SerializedObject(to);
-                            var sp = s.FindProperty(pp);
-                            if (sp != null) { sp.stringValue = cap; s.ApplyModifiedProperties(); }
-                        });
-                    }
-                else if (IsSimpleType(f.FieldType))
+
+                if (IsSimpleType(f.FieldType))
                 {
-                    any = true;
-                    var cap = $"{prefix}.{f.Name}";
-                    menu.AddItem(new GUIContent($"{prefix}/{dn}"), false, () =>
-                    {
-                        var s = new SerializedObject(to);
-                        var sp = s.FindProperty(pp);
-                        if (sp != null) { sp.stringValue = cap; s.ApplyModifiedProperties(); }
-                    });
+                    paths.Add(prefix + f.Name);
+                }
+                else if (ShouldFlattenSubField(f.FieldType))
+                {
+                    paths.AddRange(CollectSubFields(f.FieldType, prefix + f.Name + ".", new HashSet<Type>()));
                 }
             }
-            if (!any) menu.AddDisabledItem(new GUIContent($"{prefix}/(无)"));
+            return paths;
         }
 
-        private bool ShouldFlattenInMenu(Type t) => !t.IsPrimitive && t != typeof(string) && !t.IsEnum && !t.IsArray && !t.IsGenericType && !typeof(UnityEngine.Object).IsAssignableFrom(t) && t.IsSerializable;
+        private List<string> CollectSubFields(Type type, string prefix, HashSet<Type> visited)
+        {
+            var paths = new List<string>();
+            if (type == null || !visited.Add(type)) return paths;
+
+            foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (f.IsInitOnly || f.IsLiteral || f.IsStatic) continue;
+                if (f.GetCustomAttribute<ObsoleteAttribute>() != null) continue;
+
+                if (IsSimpleType(f.FieldType))
+                {
+                    paths.Add(prefix + f.Name);
+                }
+                else if (ShouldFlattenSubField(f.FieldType))
+                {
+                    paths.AddRange(CollectSubFields(f.FieldType, prefix + f.Name + ".", visited));
+                }
+            }
+
+            foreach (var p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!p.CanRead) continue;
+                if (p.GetCustomAttribute<ObsoleteAttribute>() != null) continue;
+
+                if (IsSimpleType(p.PropertyType))
+                {
+                    paths.Add(prefix + p.Name);
+                }
+                else if (ShouldFlattenSubField(p.PropertyType))
+                {
+                    paths.AddRange(CollectSubFields(p.PropertyType, prefix + p.Name + ".", visited));
+                }
+            }
+
+            return paths;
+        }
+
+        private bool ShouldFlattenSubField(Type t)
+        {
+            if (t.IsPrimitive) return false;
+            if (t == typeof(string)) return false;
+            if (t.IsEnum) return false;
+            if (t.IsArray) return false;
+            if (t.IsGenericType) return false;
+            if (typeof(UnityEngine.Object).IsAssignableFrom(t)) return false;
+            if (t.Namespace != null && t.Namespace.StartsWith("UnityEngine")) return false;
+            return t.IsSerializable && !t.IsAbstract;
+        }
 
         private bool IsSimpleType(Type t) => t.IsPrimitive || t == typeof(string) || t == typeof(float) || t == typeof(int) || t == typeof(bool) || t == typeof(double) || t.IsEnum || t == typeof(Vector2) || t == typeof(Vector3);
 
