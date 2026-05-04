@@ -526,11 +526,11 @@ namespace TechCosmos.SkillSystem.Editor
 
             EditorGUILayout.BeginHorizontal();
 
-            // Key 输入框（必需的不可编辑）
+            // Key 输入框（锁定的显示描述名）
             if (isLocked)
             {
-                var desc = GetRequiredKeyDescription(key);
-                var displayKey = string.IsNullOrEmpty(desc) ? key : $"{desc}";
+                var desc = GetRequiredDataDescription(key);
+                var displayKey = string.IsNullOrEmpty(desc) ? key : desc;
                 EditorGUILayout.LabelField(displayKey, EditorStyles.boldLabel, GUILayout.Width(140));
                 EditorGUILayout.LabelField("🔒", GUILayout.Width(20));
             }
@@ -590,6 +590,12 @@ namespace TechCosmos.SkillSystem.Editor
             // 值编辑区域
             if (containerProp.managedReferenceValue != null)
             {
+                // 锁定的 key：显示归属信息
+                if (isLocked && requiredKeys.Contains(key))
+                {
+                    DrawRequiredOwners(key);
+                }
+
                 EditorGUI.indentLevel++;
 
                 if (containerProp.managedReferenceValue is FormulaValue)
@@ -996,7 +1002,7 @@ namespace TechCosmos.SkillSystem.Editor
 
         #endregion
 
-        #region 必需数据同步
+        #region 必需数据同步与归属显示
 
         private void SyncRequiredDataEntries()
         {
@@ -1008,7 +1014,6 @@ namespace TechCosmos.SkillSystem.Editor
             var requiredKeys = _requiredKeys ?? new HashSet<string>();
             var existingKeys = new HashSet<string>();
 
-            // 收集现有 key
             for (int i = 0; i < serializedDataProp.arraySize; i++)
             {
                 var elem = serializedDataProp.GetArrayElementAtIndex(i);
@@ -1097,7 +1102,18 @@ namespace TechCosmos.SkillSystem.Editor
 
             ValueContainer container;
 
-            if (attr.ValueType == typeof(float))
+            if (attr.IsFormula)
+            {
+                container = new FormulaValue
+                {
+                    formulaType = attr.FormulaType,
+                    staticValue = attr.StaticValue,
+                    referencePath = attr.ReferencePath ?? "",
+                    customFormula = attr.CustomFormula ?? "",
+                    multiplier = 1f
+                };
+            }
+            else if (attr.ValueType == typeof(float))
                 container = new FloatValue { value = float.TryParse(attr.DefaultValue, out var f) ? f : 0f };
             else if (attr.ValueType == typeof(int))
                 container = new IntValue { value = int.TryParse(attr.DefaultValue, out var i) ? i : 0 };
@@ -1116,7 +1132,68 @@ namespace TechCosmos.SkillSystem.Editor
             serializedObject.ApplyModifiedProperties();
         }
 
-        private string GetRequiredKeyDescription(string key)
+        private void DrawRequiredOwners(string key)
+        {
+            var owners = new List<(string name, string type)>();
+
+            foreach (var c in currentTarget.Conditions ?? Enumerable.Empty<ConditionBase>())
+            {
+                if (c == null) continue;
+                var attr = c.GetType().GetCustomAttributes<RequiredDataAttribute>()
+                    .FirstOrDefault(a => a.Key == key);
+                if (attr != null)
+                {
+                    var typeName = ObjectNames.NicifyVariableName(c.GetType().Name);
+                    owners.Add((typeName, "条件"));
+                }
+            }
+
+            foreach (var m in currentTarget.Mechanisms ?? Enumerable.Empty<MechanismBase>())
+            {
+                if (m == null) continue;
+                var attr = m.GetType().GetCustomAttributes<RequiredDataAttribute>()
+                    .FirstOrDefault(a => a.Key == key);
+                if (attr != null)
+                {
+                    var typeName = ObjectNames.NicifyVariableName(m.GetType().Name);
+                    owners.Add((typeName, "机制"));
+                }
+            }
+
+            var desc = GetRequiredDataDescription(key);
+
+            if (owners.Count == 1)
+            {
+                var o = owners[0];
+                var text = $"【{o.name}({o.type})】";
+                if (!string.IsNullOrEmpty(desc)) text += $" {desc}";
+                EditorGUILayout.LabelField(text, EditorStyles.miniLabel);
+            }
+            else if (owners.Count > 1)
+            {
+                var foldoutKey = $"required_owner_{key}";
+                if (!foldoutStates.ContainsKey(foldoutKey)) foldoutStates[foldoutKey] = false;
+
+                var label = $"📎 隶属于 {owners.Count} 个模块";
+                if (!string.IsNullOrEmpty(desc)) label += $" — {desc}";
+
+                foldoutStates[foldoutKey] = EditorGUILayout.Foldout(foldoutStates[foldoutKey], label);
+
+                if (foldoutStates[foldoutKey])
+                {
+                    foreach (var o in owners)
+                    {
+                        EditorGUILayout.LabelField($"• {o.name} ({o.type})", EditorStyles.miniLabel);
+                    }
+                }
+            }
+            else if (!string.IsNullOrEmpty(desc))
+            {
+                EditorGUILayout.LabelField(desc, EditorStyles.miniLabel);
+            }
+        }
+
+        private string GetRequiredDataDescription(string key)
         {
             if (currentTarget == null) return null;
 
@@ -1125,7 +1202,7 @@ namespace TechCosmos.SkillSystem.Editor
                 if (c == null) continue;
                 var attr = c.GetType().GetCustomAttributes<RequiredDataAttribute>()
                     .FirstOrDefault(a => a.Key == key);
-                if (attr != null) return attr.Description;
+                if (attr?.Description != null) return attr.Description;
             }
 
             foreach (var m in currentTarget.Mechanisms ?? Enumerable.Empty<MechanismBase>())
@@ -1133,10 +1210,17 @@ namespace TechCosmos.SkillSystem.Editor
                 if (m == null) continue;
                 var attr = m.GetType().GetCustomAttributes<RequiredDataAttribute>()
                     .FirstOrDefault(a => a.Key == key);
-                if (attr != null) return attr.Description;
+                if (attr?.Description != null) return attr.Description;
             }
 
             return null;
+        }
+
+        private string GetKeyFromContainer(SerializedProperty containerProp)
+        {
+            var entryProp = containerProp.serializedObject.FindProperty(
+                containerProp.propertyPath.Replace(".valueContainer", ""));
+            return entryProp?.FindPropertyRelative("key")?.stringValue ?? "";
         }
 
         #endregion
@@ -1155,16 +1239,33 @@ namespace TechCosmos.SkillSystem.Editor
 
         private void ShowTypeMenu(SerializedProperty cp)
         {
+            var keyProp = GetKeyFromContainer(cp);
+            var allowedTypes = GetAllowedTypesForKey(keyProp);
+
+            bool allowAll = allowedTypes == null || allowedTypes.Length == 0;
+
             var menu = new GenericMenu();
-            menu.AddItem(new GUIContent("Float"), false, () => SwitchType(cp, new FloatValue()));
-            menu.AddItem(new GUIContent("Int"), false, () => SwitchType(cp, new IntValue()));
-            menu.AddItem(new GUIContent("String"), false, () => SwitchType(cp, new StringValue()));
-            menu.AddItem(new GUIContent("Bool"), false, () => SwitchType(cp, new BoolValue()));
-            menu.AddSeparator("");
-            menu.AddItem(new GUIContent("Formula/Static"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Static }));
-            menu.AddItem(new GUIContent("Formula/Reference"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Reference }));
-            menu.AddItem(new GUIContent("Formula/Expression"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Expression, multiplier = 1f }));
-            menu.AddItem(new GUIContent("Formula/Custom"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Custom }));
+
+            if (allowAll || allowedTypes.Contains(typeof(float)))
+                menu.AddItem(new GUIContent("Float"), false, () => SwitchType(cp, new FloatValue()));
+
+            if (allowAll || allowedTypes.Contains(typeof(int)))
+                menu.AddItem(new GUIContent("Int"), false, () => SwitchType(cp, new IntValue()));
+
+            if (allowAll || allowedTypes.Contains(typeof(string)))
+                menu.AddItem(new GUIContent("String"), false, () => SwitchType(cp, new StringValue()));
+
+            if (allowAll || allowedTypes.Contains(typeof(bool)))
+                menu.AddItem(new GUIContent("Bool"), false, () => SwitchType(cp, new BoolValue()));
+
+            if (allowAll || allowedTypes.Contains(typeof(FormulaValue)))
+            {
+                menu.AddSeparator("");
+                menu.AddItem(new GUIContent("Formula/Static"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Static }));
+                menu.AddItem(new GUIContent("Formula/Reference"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Reference }));
+                menu.AddItem(new GUIContent("Formula/Expression"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Expression, multiplier = 1f }));
+                menu.AddItem(new GUIContent("Formula/Custom"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Custom }));
+            }
 
             var marked = GetDataEntryTypesCached();
             if (marked.Count > 0)
@@ -1172,6 +1273,7 @@ namespace TechCosmos.SkillSystem.Editor
                 menu.AddSeparator("");
                 foreach (var item in marked)
                 {
+                    if (!allowAll && !allowedTypes.Contains(item.Item1)) continue;
                     var dn = item.Item2?.DisplayName ?? item.Item1.Name;
                     var ct = item.Item1;
                     menu.AddItem(new GUIContent($"自定义/{dn}"), false,
@@ -1179,6 +1281,29 @@ namespace TechCosmos.SkillSystem.Editor
                 }
             }
             menu.ShowAsContext();
+        }
+
+        private Type[] GetAllowedTypesForKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return null;
+
+            foreach (var c in currentTarget.Conditions ?? Enumerable.Empty<ConditionBase>())
+            {
+                if (c == null) continue;
+                var attr = c.GetType().GetCustomAttributes<RequiredDataAttribute>()
+                    .FirstOrDefault(a => a.Key == key);
+                if (attr?.AllowedTypes != null) return attr.AllowedTypes;
+            }
+
+            foreach (var m in currentTarget.Mechanisms ?? Enumerable.Empty<MechanismBase>())
+            {
+                if (m == null) continue;
+                var attr = m.GetType().GetCustomAttributes<RequiredDataAttribute>()
+                    .FirstOrDefault(a => a.Key == key);
+                if (attr?.AllowedTypes != null) return attr.AllowedTypes;
+            }
+
+            return null;
         }
 
         private void SwitchType(SerializedProperty cp, ValueContainer vc)

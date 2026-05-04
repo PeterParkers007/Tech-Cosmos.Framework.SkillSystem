@@ -3,15 +3,45 @@ using System;
 namespace TechCosmos.SkillSystem.Runtime
 {
     /// <summary>
-    /// 声明机制/条件需要的数据项
+    /// 声明机制/条件需要的数据项。
+    /// 添加后在编辑器的数值层会自动创建对应条目，删除机制/条件后自动移除。
     /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
     public class RequiredDataAttribute : Attribute
     {
+        /// <summary>数据键名（对应 DataLayer.GetValue 的 key）</summary>
         public string Key { get; }
+
+        /// <summary>数据类型</summary>
         public Type ValueType { get; }
+
+        /// <summary>默认值（字符串形式，float 默认 0，int 默认 0，string 默认 ""，bool 默认 false）</summary>
         public string DefaultValue { get; set; }
+
+        /// <summary>描述文字（显示在数值层条目标题）</summary>
         public string Description { get; set; }
+
+        /// <summary>是否是公式类型（设为 true 则自动创建 FormulaValue）</summary>
+        public bool IsFormula { get; set; }
+
+        /// <summary>公式类型（IsFormula=true 时生效）</summary>
+        public FormulaValue.FormulaType FormulaType { get; set; } = FormulaValue.FormulaType.Static;
+
+        /// <summary>公式的静态默认值（IsFormula=true 时生效）</summary>
+        public float StaticValue { get; set; }
+
+        /// <summary>公式的引用路径（IsFormula=true 且 FormulaType=Reference 时生效）</summary>
+        public string ReferencePath { get; set; }
+
+        /// <summary>公式的自定义表达式（IsFormula=true 且 FormulaType=Custom 时生效）</summary>
+        public string CustomFormula { get; set; }
+
+        /// <summary>
+        /// 允许切换到的类型白名单。
+        /// 为 null 或空数组表示允许所有类型。
+        /// 例如 new[] { typeof(float), typeof(FormulaValue) } 只允许 Float 和 Formula 切换。
+        /// </summary>
+        public Type[] AllowedTypes { get; set; }
 
         public RequiredDataAttribute(string key, Type valueType)
         {
