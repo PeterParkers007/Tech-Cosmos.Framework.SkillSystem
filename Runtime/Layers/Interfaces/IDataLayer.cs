@@ -6,5 +6,7 @@ namespace TechCosmos.SkillSystem.Runtime
         public TValue GetValue<TValue>(string key, SkillContext<T> context);
         public void SetValue<TValue>(string key, TValue value);
         public void SetFormula<TValue>(string key, Func<SkillContext<T>, TValue> formula);
+        public bool TryGetValue<TValue>(string key, SkillContext<T> context, out TValue value);
+        public bool ContainsKey(string key);
     }
 }
