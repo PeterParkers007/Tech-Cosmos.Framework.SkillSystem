@@ -10,40 +10,56 @@ namespace TechCosmos.SkillSystem.Runtime
         public ISkill<T> Skill { get; set; }
 
         public DataLayer(Dictionary<string, object> data) => _data = data ?? new Dictionary<string, object>();
+        
+        public bool ContainsKey(string key) => _data.ContainsKey(key);
 
-        public TValue GetValue<TValue>(string key, SkillContext<T> context)
+        public bool TryGetValue<TValue>(string key, SkillContext<T> context, out TValue value)
         {
             if (!_data.ContainsKey(key))
             {
-                Debug.LogWarning($"未找到数据键 [{key}]");
-                return default;
+                value = default;
+                return false;
             }
 
-            var value = _data[key];
+            var rawValue = _data[key];
 
-            // 公式类型
-            if (value is FormulaValue formulaVal)
+            if (rawValue is FormulaValue formulaVal)
             {
-                return ResolveFormula<TValue>(formulaVal, context);
+                value = ResolveFormula<TValue>(formulaVal, context);
+                return true;
             }
 
-            // 委托公式
-            if (value is Func<SkillContext<T>, TValue> func)
-                return func(context);
+            if (rawValue is Func<SkillContext<T>, TValue> func)
+            {
+                value = func(context);
+                return true;
+            }
 
-            // 直接类型匹配
-            if (value is TValue typedValue)
-                return typedValue;
+            if (rawValue is TValue typedValue)
+            {
+                value = typedValue;
+                return true;
+            }
 
-            // 尝试类型转换
             try
             {
-                return (TValue)Convert.ChangeType(value, typeof(TValue));
+                value = (TValue)Convert.ChangeType(rawValue, typeof(TValue));
+                return true;
             }
             catch
             {
-                return default;
+                value = default;
+                return false;
             }
+        }
+
+        public TValue GetValue<TValue>(string key, SkillContext<T> context)
+        {
+            if (TryGetValue(key, context, out TValue value))
+                return value;
+
+            Debug.LogWarning($"[DataLayer] 找不到数据键 '{key}'");
+            return default;
         }
 
         private TValue ResolveFormula<TValue>(FormulaValue formula, SkillContext<T> context)
@@ -59,11 +75,9 @@ namespace TechCosmos.SkillSystem.Runtime
                     return ConvertValue<TValue>(refValue);
 
                 case FormulaValue.FormulaType.Expression:
-                    float baseValue = formula.staticValue;
+                    float baseValue = 0f;
                     if (!string.IsNullOrEmpty(formula.referencePath))
-                    {
                         baseValue = FormulaEvaluator.Evaluate<T>(context, formula.referencePath);
-                    }
                     baseValue = ApplyOperator(baseValue, formula);
                     return ConvertValue<TValue>(baseValue);
 
@@ -87,27 +101,17 @@ namespace TechCosmos.SkillSystem.Runtime
             };
         }
 
-        /// <summary>
-        /// 安全转换值类型
-        /// </summary>
         private TValue ConvertValue<TValue>(float value)
         {
-            if (typeof(TValue) == typeof(float))
-                return (TValue)(object)value;
-            if (typeof(TValue) == typeof(int))
-                return (TValue)(object)(int)value;
-            if (typeof(TValue) == typeof(bool))
-                return (TValue)(object)(value != 0f);
+            if (typeof(TValue) == typeof(float))  return (TValue)(object)value;
+            if (typeof(TValue) == typeof(int))    return (TValue)(object)Mathf.RoundToInt(value);
+            if (typeof(TValue) == typeof(bool))   return (TValue)(object)(value != 0f);
+            if (typeof(TValue) == typeof(double)) return (TValue)(object)(double)value;
+            if (typeof(TValue) == typeof(long))   return (TValue)(object)(long)value;
+            if (typeof(TValue) == typeof(string)) return (TValue)(object)value.ToString("F2");
 
-            // 默认尝试转换
-            try
-            {
-                return (TValue)Convert.ChangeType(value, typeof(TValue));
-            }
-            catch
-            {
-                return default;
-            }
+            try { return (TValue)Convert.ChangeType(value, typeof(TValue)); }
+            catch { return default; }
         }
 
         public void SetValue<TValue>(string key, TValue value) => _data[key] = value;
