@@ -121,6 +121,7 @@ namespace TechCosmos.SkillSystem.Runtime
             if (value is string s) return new StringValue { value = s };
             if (value is bool b) return new BoolValue { value = b };
             if (value is FormulaValue fv) return fv;
+            if (value is RandomValue rv) return rv;
             if (value.GetType().GetCustomAttribute<DataEntryTypeAttribute>() != null)
                 return new SerializableValue { value = value };
             return new StringValue { value = value.ToString() };
@@ -134,7 +135,6 @@ namespace TechCosmos.SkillSystem.Runtime
     {
         public SkillData<T> GetSkillData()
         {
-            // 关键修复：从基类的 Conditions 列表中筛选并转换出泛型条件
             var runtimeConditions = new List<Condition<T>>();
             if (base.Conditions != null)
             {
@@ -153,7 +153,6 @@ namespace TechCosmos.SkillSystem.Runtime
                 }
             }
 
-            // 同理，也要确保 Mechanisms 是正确转换的
             var runtimeMechanisms = new List<MechanismBase>();
             if (base.Mechanisms != null)
             {
@@ -172,18 +171,12 @@ namespace TechCosmos.SkillSystem.Runtime
                 }
             }
 
-            // 同时从泛型基类的 Conditions 中获取直接添加的泛型条件
-            // （如果你的生成代码或手动代码直接向 SkillDataSO<T> 添加了 Condition<T>）
-            // 注意：这里需要检查你的具体 SkillDataSO<T> 子类是否有额外字段
-
             return new SkillData<T>
             {
                 SkillType = SkillType,
                 TriggerEvent = TriggerEvent,
                 SkillName = SkillName,
                 SkillDescription = SkillDescription,
-
-                // 使用转换后的列表
                 Conditions = runtimeConditions,
                 Mechanisms = runtimeMechanisms,
                 Data = GetData()
@@ -215,6 +208,34 @@ namespace TechCosmos.SkillSystem.Runtime
         public string customFormula;
         public override object GetValue() => this;
     }
+
+    [Serializable]
+    public class RandomValue : ValueContainer
+    {
+        public enum RandomMode { Uniform }
+        public RandomMode mode = RandomMode.Uniform;
+        public float min = 0f;
+        public float max = 1f;
+        public bool useInteger = false;
+        public override object GetValue() => this;
+
+        public float Resolve()
+        {
+            if (useInteger)
+                return UnityEngine.Random.Range((int)min, (int)max + 1);
+            return UnityEngine.Random.Range(min, max);
+        }
+
+        public float Resolve(int seed)
+        {
+            var oldState = UnityEngine.Random.state;
+            UnityEngine.Random.InitState(seed);
+            float result = Resolve();
+            UnityEngine.Random.state = oldState;
+            return result;
+        }
+    }
+
     [Serializable] public class SerializableValue : ValueContainer { [SerializeReference] public object value; public override object GetValue() => value; }
 
     #endregion

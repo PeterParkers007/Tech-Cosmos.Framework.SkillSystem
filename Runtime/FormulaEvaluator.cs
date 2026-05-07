@@ -18,6 +18,7 @@ namespace TechCosmos.SkillSystem.Runtime
             {
                 var baseContext = (SkillContextBase)context;
                 var resolved = ResolveReferences(baseContext, formula);
+                resolved = ResolveRandomFunctions(resolved);
                 return EvaluateExpression(resolved);
             }
             catch (Exception e)
@@ -35,6 +36,7 @@ namespace TechCosmos.SkillSystem.Runtime
             try
             {
                 var resolved = ResolveReferences(context, formula);
+                resolved = ResolveRandomFunctions(resolved);
                 return EvaluateExpression(resolved);
             }
             catch (Exception e)
@@ -56,6 +58,17 @@ namespace TechCosmos.SkillSystem.Runtime
             });
         }
 
+        private static string ResolveRandomFunctions(string expression)
+        {
+            var regex = new Regex(@"random\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)");
+            return regex.Replace(expression, match =>
+            {
+                float min = float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+                float max = float.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
+                return UnityEngine.Random.Range(min, max).ToString(CultureInfo.InvariantCulture);
+            });
+        }
+
         private static float ResolvePath(SkillContextBase context, string source, string path)
         {
             object obj = source switch
@@ -74,7 +87,6 @@ namespace TechCosmos.SkillSystem.Runtime
 
                 var type = obj.GetType();
 
-                // 查找属性
                 var property = type.GetProperty(part, BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
                 if (property != null && property.CanRead)
                 {
@@ -82,7 +94,6 @@ namespace TechCosmos.SkillSystem.Runtime
                     continue;
                 }
 
-                // 查找字段
                 var field = type.GetField(part, BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
                 if (field != null)
                 {
@@ -93,7 +104,6 @@ namespace TechCosmos.SkillSystem.Runtime
                 return 0f;
             }
 
-            // 只在最终结果时转 float
             return obj switch
             {
                 float f => f,
@@ -106,8 +116,6 @@ namespace TechCosmos.SkillSystem.Runtime
                 _ => 0f
             };
         }
-
-        // ===== 以下为表达式求值（括号、运算符优先级），与之前一致 =====
 
         private static float EvaluateExpression(string expression)
         {

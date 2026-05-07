@@ -18,7 +18,6 @@ namespace TechCosmos.SkillSystem.Editor
         private SerializedProperty serializedDataProp;
         private double lastRepaintTime;
         private const double REPAINT_INTERVAL = 0.05;
-        // 缓存
         private HashSet<string> cachedGeneratedKeys;
         private List<(Type type, DataEntryTypeAttribute attr)> cachedDataEntryTypes;
         private Dictionary<string, List<PropertyInfo>> cachedPropGroups;
@@ -261,7 +260,6 @@ namespace TechCosmos.SkillSystem.Editor
             RefreshCacheIfNeeded();
             serializedObject.Update();
 
-            // 同步必需数据项
             SyncRequiredDataEntries();
 
             scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
@@ -422,7 +420,7 @@ namespace TechCosmos.SkillSystem.Editor
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
                 if (!foldoutStates.ContainsKey(group.Key)) foldoutStates[group.Key] = true;
-                foldoutStates[group.Key] = EditorGUILayout.Foldout(foldoutStates[group.Key], $"▸ {group.Key}", true);
+                foldoutStates[group.Key] = EditorGUILayout.Foldout(foldoutStates[group.Key], $"▆ {group.Key}", true);
 
                 if (foldoutStates[group.Key])
                 {
@@ -497,6 +495,13 @@ namespace TechCosmos.SkillSystem.Editor
             { AddEntry("custom", new FormulaValue { formulaType = FormulaValue.FormulaType.Custom }); dirty = true; }
             EditorGUILayout.EndHorizontal();
 
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Random(浮点)", GUILayout.Height(24)))
+            { AddEntry("randomFloat", new RandomValue { min = 0f, max = 1f }); dirty = true; }
+            if (GUILayout.Button("Random(整数)", GUILayout.Height(24)))
+            { AddEntry("randomInt", new RandomValue { min = 1f, max = 100f, useInteger = true }); dirty = true; }
+            EditorGUILayout.EndHorizontal();
+
             var markedTypes = GetDataEntryTypesCached();
             if (markedTypes.Count > 0)
             {
@@ -526,7 +531,6 @@ namespace TechCosmos.SkillSystem.Editor
 
             EditorGUILayout.BeginHorizontal();
 
-            // Key 输入框（锁定的显示描述名）
             if (isLocked)
             {
                 var desc = GetRequiredDataDescription(key);
@@ -548,6 +552,7 @@ namespace TechCosmos.SkillSystem.Editor
                     nameof(StringValue) => "Str",
                     nameof(BoolValue) => "Bool",
                     nameof(FormulaValue) => "Formula",
+                    nameof(RandomValue) => "Random",
                     nameof(SerializableValue) => GetTypeLabel(containerProp),
                     _ => "Obj"
                 };
@@ -560,6 +565,7 @@ namespace TechCosmos.SkillSystem.Editor
                     "Str" => new Color(1f, 0.8f, 0.3f),
                     "Bool" => new Color(1f, 0.5f, 0.5f),
                     "Formula" => new Color(1f, 0.4f, 1f),
+                    "Random" => new Color(1f, 0.6f, 0.2f),
                     _ => Color.white
                 };
                 EditorGUILayout.LabelField(typeLabel, EditorStyles.miniLabel, GUILayout.Width(60));
@@ -569,7 +575,6 @@ namespace TechCosmos.SkillSystem.Editor
                     ShowTypeMenu(containerProp);
             }
 
-            // 删除按钮：锁定的不可删除
             if (!isLocked)
             {
                 GUI.backgroundColor = new Color(1f, 0.4f, 0.4f);
@@ -587,10 +592,8 @@ namespace TechCosmos.SkillSystem.Editor
 
             EditorGUILayout.EndHorizontal();
 
-            // 值编辑区域
             if (containerProp.managedReferenceValue != null)
             {
-                // 锁定的 key：显示归属信息
                 if (isLocked && requiredKeys.Contains(key))
                 {
                     DrawRequiredOwners(key);
@@ -601,6 +604,10 @@ namespace TechCosmos.SkillSystem.Editor
                 if (containerProp.managedReferenceValue is FormulaValue)
                 {
                     DrawFormulaExpanded(containerProp);
+                }
+                else if (containerProp.managedReferenceValue is RandomValue)
+                {
+                    DrawRandomExpanded(containerProp);
                 }
                 else
                 {
@@ -631,6 +638,32 @@ namespace TechCosmos.SkillSystem.Editor
             EditorGUILayout.EndVertical();
         }
 
+        private void DrawRandomExpanded(SerializedProperty containerProp)
+        {
+            var modeProp = containerProp.FindPropertyRelative("mode");
+            var minProp = containerProp.FindPropertyRelative("min");
+            var maxProp = containerProp.FindPropertyRelative("max");
+            var useIntProp = containerProp.FindPropertyRelative("useInteger");
+
+            EditorGUILayout.LabelField("随机模式", "均匀随机 (Uniform)");
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("范围", GUILayout.Width(40));
+            minProp.floatValue = EditorGUILayout.FloatField(minProp.floatValue);
+            EditorGUILayout.LabelField("~", GUILayout.Width(15));
+            maxProp.floatValue = EditorGUILayout.FloatField(maxProp.floatValue);
+            EditorGUILayout.EndHorizontal();
+
+            useIntProp.boolValue = EditorGUILayout.Toggle("整数随机", useIntProp.boolValue);
+
+            float previewMin = useIntProp.boolValue ? (int)minProp.floatValue : minProp.floatValue;
+            float previewMax = useIntProp.boolValue ? (int)maxProp.floatValue : maxProp.floatValue;
+            float preview = previewMin + (previewMax - previewMin) * 0.5f;
+            EditorGUILayout.HelpBox(
+                $"示例值: {preview}\n实际运行时会在 {previewMin}~{previewMax} 之间随机",
+                MessageType.Info);
+        }
+
         private void DrawFormulaExpanded(SerializedProperty containerProp)
         {
             var ft = containerProp.FindPropertyRelative("formulaType");
@@ -654,7 +687,7 @@ namespace TechCosmos.SkillSystem.Editor
                 case FormulaValue.FormulaType.Reference:
                     EditorGUILayout.BeginHorizontal();
                     rp.stringValue = EditorGUILayout.TextField("引用路径", rp.stringValue);
-                    if (GUILayout.Button("▼", GUILayout.Width(25)))
+                    if (GUILayout.Button("▾", GUILayout.Width(25)))
                         ShowReferencePathMenu(rp);
                     EditorGUILayout.EndHorizontal();
 
@@ -689,7 +722,7 @@ namespace TechCosmos.SkillSystem.Editor
                 case FormulaValue.FormulaType.Expression:
                     EditorGUILayout.BeginHorizontal();
                     rp.stringValue = EditorGUILayout.TextField("引用路径", rp.stringValue);
-                    if (GUILayout.Button("▼", GUILayout.Width(25)))
+                    if (GUILayout.Button("▾", GUILayout.Width(25)))
                         ShowReferencePathMenu(rp);
                     EditorGUILayout.EndHorizontal();
 
@@ -713,7 +746,8 @@ namespace TechCosmos.SkillSystem.Editor
                     "变量：caster, target\n" +
                     "引用：caster.Runtime.Attack\n" +
                     "运算符：+  -  *  /  (  )\n" +
-                    "示例：caster.Attack * 1.5 + target.MaxHealth * 0.1",
+                    "随机：random(min, max)  例: random(1, 100)\n" +
+                    "示例：caster.Attack * 1.5 + random(0, 10)",
                     MessageType.Info);
             }
 
@@ -879,6 +913,12 @@ namespace TechCosmos.SkillSystem.Editor
             menu.AddItem(new GUIContent("  -1"), false, () => InsertAtCursor(customFormulaProp, "-1"));
             menu.AddItem(new GUIContent("  -0.5"), false, () => InsertAtCursor(customFormulaProp, "-0.5"));
 
+            menu.AddSeparator("");
+            menu.AddDisabledItem(new GUIContent("── 随机 ──"));
+            menu.AddItem(new GUIContent("  random(0, 1)"), false, () => InsertAtCursor(customFormulaProp, "random(0, 1)"));
+            menu.AddItem(new GUIContent("  random(1, 100)"), false, () => InsertAtCursor(customFormulaProp, "random(1, 100)"));
+            menu.AddItem(new GUIContent("  random(0, 10)"), false, () => InsertAtCursor(customFormulaProp, "random(0, 10)"));
+
             menu.ShowAsContext();
         }
 
@@ -897,6 +937,8 @@ namespace TechCosmos.SkillSystem.Editor
             menu.AddItem(new GUIContent("  攻击力 - 防御力"), false, () => InsertAtCursor(customFormulaProp, "caster.Attack - target.Defense"));
             menu.AddItem(new GUIContent("  最大生命值百分比"), false, () => InsertAtCursor(customFormulaProp, "target.MaxHealth * 0."));
             menu.AddItem(new GUIContent("  当前生命值百分比"), false, () => InsertAtCursor(customFormulaProp, "target.Health * 0."));
+            menu.AddSeparator("");
+            menu.AddItem(new GUIContent("  随机伤害(1~100)"), false, () => InsertAtCursor(customFormulaProp, "random(1, 100)"));
 
             menu.ShowAsContext();
         }
@@ -918,15 +960,20 @@ namespace TechCosmos.SkillSystem.Editor
             if (openParens != closeParens)
                 issues.Add($"⚠ 括号不匹配（左：{openParens}，右：{closeParens}）");
 
-            var matches = System.Text.RegularExpressions.Regex.Matches(formula, @"\b(caster|target)(\.[\w]+)+\b");
+            var pathMatches = System.Text.RegularExpressions.Regex.Matches(formula, @"\b(caster|target)(\.[\w]+)+\b");
             var uniquePaths = new HashSet<string>();
-            foreach (System.Text.RegularExpressions.Match m in matches)
+            foreach (System.Text.RegularExpressions.Match m in pathMatches)
                 uniquePaths.Add(m.Value);
 
             if (uniquePaths.Count > 0)
                 issues.Add($"✅ 检测到 {uniquePaths.Count} 个引用路径：\n  " + string.Join("\n  ", uniquePaths));
-            else
-                issues.Add("💡 未检测到引用路径（纯数值计算）");
+
+            var randomMatches = System.Text.RegularExpressions.Regex.Matches(formula, @"random\(\s*\d+\.?\d*\s*,\s*\d+\.?\d*\s*\)");
+            if (randomMatches.Count > 0)
+                issues.Add($"🎲 检测到 {randomMatches.Count} 个随机函数");
+
+            if (uniquePaths.Count == 0 && randomMatches.Count == 0)
+                issues.Add("💡 纯数值计算");
 
             if (System.Text.RegularExpressions.Regex.IsMatch(formula, @"[\+\-\*/]{2,}"))
                 issues.Add("⚠ 存在连续运算符");
@@ -1008,7 +1055,6 @@ namespace TechCosmos.SkillSystem.Editor
         {
             if (currentTarget == null || serializedDataProp == null) return;
 
-            // 冲突检测
             DetectAndReportTypeConflicts();
 
             var requiredKeys = _requiredKeys ?? new HashSet<string>();
@@ -1020,7 +1066,6 @@ namespace TechCosmos.SkillSystem.Editor
                 existingKeys.Add(elem.FindPropertyRelative("key").stringValue);
             }
 
-            // 添加缺失的必需数据
             foreach (var key in requiredKeys)
             {
                 if (!existingKeys.Contains(key))
@@ -1029,7 +1074,6 @@ namespace TechCosmos.SkillSystem.Editor
                 }
             }
 
-            // 移除不再需要的
             for (int i = serializedDataProp.arraySize - 1; i >= 0; i--)
             {
                 var elem = serializedDataProp.GetArrayElementAtIndex(i);
@@ -1174,7 +1218,7 @@ namespace TechCosmos.SkillSystem.Editor
                 var foldoutKey = $"required_owner_{key}";
                 if (!foldoutStates.ContainsKey(foldoutKey)) foldoutStates[foldoutKey] = false;
 
-                var label = $"📎 隶属于 {owners.Count} 个模块";
+                var label = $"📎 归属于 {owners.Count} 个模块";
                 if (!string.IsNullOrEmpty(desc)) label += $" — {desc}";
 
                 foldoutStates[foldoutKey] = EditorGUILayout.Foldout(foldoutStates[foldoutKey], label);
@@ -1265,6 +1309,15 @@ namespace TechCosmos.SkillSystem.Editor
                 menu.AddItem(new GUIContent("Formula/Reference"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Reference }));
                 menu.AddItem(new GUIContent("Formula/Expression"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Expression, multiplier = 1f }));
                 menu.AddItem(new GUIContent("Formula/Custom"), false, () => SwitchType(cp, new FormulaValue { formulaType = FormulaValue.FormulaType.Custom }));
+            }
+
+            if (allowAll || allowedTypes.Contains(typeof(RandomValue)))
+            {
+                menu.AddSeparator("");
+                menu.AddItem(new GUIContent("Random/Uniform Float"), false,
+                    () => { SwitchType(cp, new RandomValue { min = 0f, max = 1f }); dirty = true; });
+                menu.AddItem(new GUIContent("Random/Uniform Int"), false,
+                    () => { SwitchType(cp, new RandomValue { min = 1f, max = 100f, useInteger = true }); dirty = true; });
             }
 
             var marked = GetDataEntryTypesCached();

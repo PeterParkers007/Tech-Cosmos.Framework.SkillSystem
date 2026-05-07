@@ -10,7 +10,7 @@ namespace TechCosmos.SkillSystem.Runtime
         public ISkill<T> Skill { get; set; }
 
         public DataLayer(Dictionary<string, object> data) => _data = data ?? new Dictionary<string, object>();
-        
+
         public bool ContainsKey(string key) => _data.ContainsKey(key);
 
         public bool TryGetValue<TValue>(string key, SkillContext<T> context, out TValue value)
@@ -26,6 +26,13 @@ namespace TechCosmos.SkillSystem.Runtime
             if (rawValue is FormulaValue formulaVal)
             {
                 value = ResolveFormula<TValue>(formulaVal, context);
+                return true;
+            }
+
+            if (rawValue is RandomValue randomVal)
+            {
+                float randomResult = randomVal.Resolve();
+                value = ConvertValue<TValue>(randomResult);
                 return true;
             }
 
@@ -103,11 +110,11 @@ namespace TechCosmos.SkillSystem.Runtime
 
         private TValue ConvertValue<TValue>(float value)
         {
-            if (typeof(TValue) == typeof(float))  return (TValue)(object)value;
-            if (typeof(TValue) == typeof(int))    return (TValue)(object)Mathf.RoundToInt(value);
-            if (typeof(TValue) == typeof(bool))   return (TValue)(object)(value != 0f);
+            if (typeof(TValue) == typeof(float)) return (TValue)(object)value;
+            if (typeof(TValue) == typeof(int)) return (TValue)(object)Mathf.RoundToInt(value);
+            if (typeof(TValue) == typeof(bool)) return (TValue)(object)(value != 0f);
             if (typeof(TValue) == typeof(double)) return (TValue)(object)(double)value;
-            if (typeof(TValue) == typeof(long))   return (TValue)(object)(long)value;
+            if (typeof(TValue) == typeof(long)) return (TValue)(object)(long)value;
             if (typeof(TValue) == typeof(string)) return (TValue)(object)value.ToString("F2");
 
             try { return (TValue)Convert.ChangeType(value, typeof(TValue)); }
