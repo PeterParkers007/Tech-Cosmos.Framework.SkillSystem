@@ -1,19 +1,20 @@
 using System.Collections.Generic;
+
 namespace TechCosmos.SkillSystem.Runtime
 {
     public class ConditionLayer<T> : IConditionLayer<T> where T : class, IUnit<T>
     {
         public List<Condition<T>> Conditions { get; set; }
-        public ISkill<T> Skill { get; set; } 
+        public ISkill<T> Skill { get; set; }
 
         public bool CheckCondition(SkillContext<T> skillContext)
         {
-            var conditions = Conditions; 
-            int count = conditions.Count;
+            if (Conditions == null || Conditions.Count == 0)
+                return true;
 
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < Conditions.Count; i++)
             {
-                if (!conditions[i].IsEligible(skillContext,Skill.DataLayer))
+                if (Conditions[i] != null && !Conditions[i].IsEligible(skillContext, Skill.DataLayer))
                     return false;
             }
             return true;
@@ -21,7 +22,7 @@ namespace TechCosmos.SkillSystem.Runtime
 
         public ConditionLayer(List<Condition<T>> conditions = null)
         {
-            this.Conditions = conditions ?? new List<Condition<T>>();
+            Conditions = conditions ?? new List<Condition<T>>();
         }
     }
 }

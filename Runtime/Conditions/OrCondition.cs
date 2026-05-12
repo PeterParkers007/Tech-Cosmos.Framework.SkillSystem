@@ -1,5 +1,4 @@
-﻿// OR 条件（任意条件满足）
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 
 namespace TechCosmos.SkillSystem.Runtime
@@ -41,6 +40,24 @@ namespace TechCosmos.SkillSystem.Runtime
                     return true;
             }
             return false;
+        }
+
+        // 转发成功回调到所有子条件
+        public override void OnSkillExecuted(SkillContext<T> skillContext, IDataLayer<T> dataLayer)
+        {
+            for (int i = 0; i < _conditions.Count; i++)
+            {
+                _conditions[i]?.OnSkillExecuted(skillContext, dataLayer);
+            }
+        }
+
+        // 转发失败回调到所有子条件
+        public override void OnConditionFailed(SkillContext<T> skillContext, IDataLayer<T> dataLayer)
+        {
+            for (int i = 0; i < _conditions.Count; i++)
+            {
+                _conditions[i]?.OnConditionFailed(skillContext, dataLayer);
+            }
         }
 
         public void Reinitialize(params Condition<T>[] conditions)

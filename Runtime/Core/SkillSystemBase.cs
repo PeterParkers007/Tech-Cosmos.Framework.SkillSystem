@@ -29,7 +29,26 @@ namespace TechCosmos.SkillSystem.Runtime
     [Serializable]
     public abstract class ConditionBase
     {
+        /// <summary>
+        /// 检查条件是否满足
+        /// </summary>
         public abstract bool IsEligible(object context, IDataLayerBase dataLayer);
+
+        /// <summary>
+        /// 技能成功执行后的回调（由 ExecuteLayer 调用）
+        /// 用于冷却计时、状态更新等后置处理
+        /// </summary>
+        public virtual void OnSkillExecuted(object context, IDataLayerBase dataLayer) { }
+
+        /// <summary>
+        /// 条件检查失败时的回调
+        /// </summary>
+        public virtual void OnConditionFailed(object context, IDataLayerBase dataLayer) { }
+
+        /// <summary>
+        /// 技能被移除或重置时的回调
+        /// </summary>
+        public virtual void OnReset() { }
     }
     /// <summary>
     /// 非泛型机制基类，使用 object 参数以支持结构体的模式匹配

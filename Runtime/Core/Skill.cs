@@ -1,6 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
 namespace TechCosmos.SkillSystem.Runtime
 {
     public class Skill<T> : ISkill<T> where T : class, IUnit<T>
@@ -27,13 +24,22 @@ namespace TechCosmos.SkillSystem.Runtime
             DataLayer = dataLayer;
             ExecuteLayer = executeLayer;
 
-            // 设置反向引用
             baseLayer.Skill = this;
             infoLayer.Skill = this;
             conditionLayer.Skill = this;
             mechanismLayer.Skill = this;
             dataLayer.Skill = this;
             executeLayer.Skill = this;
+        }
+
+        /// <summary>重置技能所有状态（冷却、缓存等）</summary>
+        public void Reset()
+        {
+            if (ConditionLayer is ConditionLayer<T> cl && cl.Conditions != null)
+            {
+                foreach (var condition in cl.Conditions)
+                    condition?.OnReset();
+            }
         }
     }
 }
