@@ -51,8 +51,8 @@ namespace TechCosmos.SkillSystem.Editor
         }
 
         private bool IsSkippedProperty(string name)
-        {
-            return name == "m_Script" || name == "SkillType" || name == "TriggerEvent" ||
+        { 
+            return name == "m_Script" || name == "SkillType" || name == "TriggerEvents" ||  
                    name == "SkillName" || name == "SkillDescription" ||
                    name == "Conditions" || name == "Mechanisms" || name == "serializedData";
         }

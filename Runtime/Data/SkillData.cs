@@ -8,7 +8,7 @@ namespace TechCosmos.SkillSystem.Runtime
     {
         //»ù´¡²ã
         public SkillType SkillType;
-        public string TriggerEvent = string.Empty;
+        public List<string> TriggerEvents = new List<string>();
 
         //Ìõ¼þ²ã
         public List<Condition<T>> Conditions = new();

@@ -10,13 +10,13 @@ namespace TechCosmos.SkillSystem.Runtime
 
         public void AddSkill(ISkill<T> skill)
         {
-            unitEvent.Subscribe(skill.BaseLayer.TriggerEvent, skill.BaseLayer.Trigger);
+            unitEvent.SubscribeMany(skill.BaseLayer.TriggerEvents.ToArray(), skill.BaseLayer.Trigger);
             skills[skill.InformationLayer.Name] = skill;
         }
 
         public void RemoveSkill(ISkill<T> skill)
         {
-            unitEvent.Unsubscribe(skill.BaseLayer.TriggerEvent, skill.BaseLayer.Trigger);
+            unitEvent.Unsubscribe(skill.BaseLayer.TriggerEvents.ToArray(), skill.BaseLayer.Trigger);
             if(skills.ContainsKey(skill.InformationLayer.Name)) skills.Remove(skill.InformationLayer.Name);
         }
     }

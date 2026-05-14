@@ -14,7 +14,7 @@ namespace TechCosmos.SkillSystem.Runtime
         public static ISkill<T> CreateSkill(SkillData<T> data)
         {
             IBaseLayer<T> baseLayer = data.SkillType == SkillType.Passive ?
-                new PassiveBaseLayer<T>(data.TriggerEvent) : new ActiveBaseLayer<T>(data.TriggerEvent);
+                new PassiveBaseLayer<T>(data.TriggerEvents) : new ActiveBaseLayer<T>(data.TriggerEvents);
 
             IConditionLayer<T> conditionLayer = new ConditionLayer<T>(data.Conditions);
             IInformationLayer<T> infoLayer = new InformationLayer<T>(data.SkillName, data.SkillDescription);

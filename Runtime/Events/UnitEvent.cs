@@ -54,7 +54,10 @@ namespace TechCosmos.SkillSystem.Runtime
                 InvalidateCache(eventName);
             }
         }
-
+        public void Unsubscribe(string[] events, Action<SkillContext<T>> action)
+        {
+            foreach (var @event in events) Unsubscribe(@event,action);
+        }
         public void Trigger(string eventName, SkillContext<T> skillContext)
         {
             if (string.IsNullOrEmpty(eventName))

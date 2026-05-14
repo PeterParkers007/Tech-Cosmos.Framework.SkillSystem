@@ -12,7 +12,7 @@ namespace TechCosmos.SkillSystem.Runtime
     public abstract class SkillDataSO : ScriptableObject, ISerializationCallbackReceiver
     {
         public SkillType SkillType;
-        public string TriggerEvent = "OnAttack";
+        public List<string> TriggerEvents = new List<string>() { "OnAttack" };
 
         public string SkillName;
         public string SkillDescription;
@@ -174,7 +174,7 @@ namespace TechCosmos.SkillSystem.Runtime
             return new SkillData<T>
             {
                 SkillType = SkillType,
-                TriggerEvent = TriggerEvent,
+                TriggerEvents = TriggerEvents,
                 SkillName = SkillName,
                 SkillDescription = SkillDescription,
                 Conditions = runtimeConditions,
