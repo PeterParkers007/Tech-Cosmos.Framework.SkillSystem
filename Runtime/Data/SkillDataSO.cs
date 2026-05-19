@@ -9,7 +9,7 @@ using UnityEditor;
 
 namespace TechCosmos.SkillSystem.Runtime
 {
-    public abstract class SkillDataSO : ScriptableObject, ISerializationCallbackReceiver
+    public abstract partial class SkillDataSO : ScriptableObject, ISerializationCallbackReceiver
     {
         public SkillType SkillType;
         public List<string> TriggerEvents = new List<string>() { "OnAttack" };

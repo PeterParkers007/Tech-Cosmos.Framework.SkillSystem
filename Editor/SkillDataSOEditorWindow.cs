@@ -271,6 +271,7 @@ namespace TechCosmos.SkillSystem.Editor
             DrawConditions();
             DrawMechanisms();
             DrawCustomProperties();
+            DrawResources();
             DrawDataLayer();
 
             EditorGUILayout.EndScrollView();
@@ -969,7 +970,16 @@ namespace TechCosmos.SkillSystem.Editor
             string result = string.Join("\n\n", issues);
             EditorUtility.DisplayDialog("公式检查", result, "确定");
         }
+        private void DrawResources()
+        {
+            DrawSectionHeader("资源层 (Resources)");
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
+            var resourcesProp = serializedObject.FindProperty("_skillResources");
+            EditorGUILayout.PropertyField(resourcesProp, new GUIContent("技能资源"), true);
+
+            EditorGUILayout.EndVertical();
+        }
         private object DrawField(Type type, string label, object value)
         {
             if (type == typeof(int)) return EditorGUILayout.IntField(label, value != null ? (int)value : 0);
