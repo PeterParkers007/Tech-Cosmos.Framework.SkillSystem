@@ -1,4 +1,4 @@
-﻿// Editor/TriggerEventEnumGenerator.cs
+// Editor/TriggerEventEnumGenerator.cs
 #if UNITY_EDITOR
 using System;
 using System.IO;
@@ -12,15 +12,16 @@ using TechCosmos.SkillSystem.Runtime;
 
 namespace TechCosmos.SkillSystem.Editor
 {
+    /// <summary>
+    /// 从 IUnit 与 SkillDataSO 资产收集触发事件，自动生成 TriggerEventType 枚举。
+    /// </summary>
     public static class TriggerEventEnumGenerator
     {
         private const string ENUM_FILE_PATH = "Assets/Generated/TriggerEventType.cs";
         private const string GENERATED_REGION_START = "// BEGIN_AUTO_GENERATED";
         private const string GENERATED_REGION_END = "// END_AUTO_GENERATED";
 
-        /// <summary>
-        /// 从所有 IUnit 实现的 GetSupportedEvents() 收集事件，生成枚举
-        /// </summary>
+        /// <summary>收集所有触发事件并写入 TriggerEventType.cs。</summary>
         public static void UpdateTriggerEventEnum()
         {
             var events = CollectAllEvents();
@@ -158,7 +159,7 @@ namespace TechCosmos.SkillSystem.Editor
                 catch { }
             }
 
-            // 也扫描 SkillDataSO 子类中的 TriggerEvent 字段默认值
+            // 扫描 SkillDataSO 资产中的 TriggerEvents
             foreach (var assembly in allAssemblies)
             {
                 try
@@ -169,17 +170,42 @@ namespace TechCosmos.SkillSystem.Editor
 
                     foreach (var type in soTypes)
                     {
-                        var field = type.GetField("TriggerEvent",
+                        var field = type.GetField("TriggerEvents",
                             BindingFlags.Public | BindingFlags.Instance);
                         if (field == null) continue;
 
-                        // 检查是否有 DefaultValue 或初始化值
-                        var fieldInfo = type.GetProperty("TriggerEvent",
-                            BindingFlags.Public | BindingFlags.Instance);
-                        // 这个很难静态获取，跳过用下面的方式
+                        // 尝试从默认实例读取（ScriptableObject 子类）
+                        try
+                        {
+                            var instance = ScriptableObject.CreateInstance(type) as SkillDataSO;
+                            if (instance?.TriggerEvents != null)
+                            {
+                                foreach (var evt in instance.TriggerEvents)
+                                {
+                                    if (!string.IsNullOrEmpty(evt))
+                                        events.Add(evt);
+                                }
+                            }
+                            UnityEngine.Object.DestroyImmediate(instance);
+                        }
+                        catch { }
                     }
                 }
                 catch { }
+            }
+
+            // 扫描项目中已有的 SkillDataSO 资产
+            var guids = AssetDatabase.FindAssets("t:SkillDataSO");
+            foreach (var guid in guids)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                var so = AssetDatabase.LoadAssetAtPath<SkillDataSO>(path);
+                if (so?.TriggerEvents == null) continue;
+                foreach (var evt in so.TriggerEvents)
+                {
+                    if (!string.IsNullOrEmpty(evt))
+                        events.Add(evt);
+                }
             }
 
             return events;

@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
 using System;
@@ -9,6 +9,9 @@ using TechCosmos.SkillSystem.Runtime;
 
 namespace TechCosmos.SkillSystem.Editor
 {
+    /// <summary>
+    /// 技能数据专用编辑器窗口，集中编辑条件树、Timeline、数值层与公式。
+    /// </summary>
     public class SkillDataSOEditorWindow : EditorWindow
     {
         private SkillDataSO currentTarget;
@@ -83,6 +86,7 @@ namespace TechCosmos.SkillSystem.Editor
             AssetDatabase.SaveAssets();
         }
 
+        /// <summary>打开空的技能编辑器窗口。</summary>
         [MenuItem("Tech-Cosmos/SkillSystem/Skill Editor Window")]
         public static void OpenWindow()
         {
@@ -94,6 +98,14 @@ namespace TechCosmos.SkillSystem.Editor
         [MenuItem("Tech-Cosmos/SkillSystem/Open Skill Editor", true)]
         private static bool OpenWindowValidate() => Selection.activeObject is SkillDataSO;
 
+        /// <summary>打开技能编辑器窗口（与 Skill Editor Window 相同入口）。</summary>
+        [MenuItem("Tech-Cosmos/SkillSystem/Skill Timeline Editor", priority = 6)]
+        public static void OpenTimelineEditor()
+        {
+            OpenWindow();
+        }
+
+        /// <summary>从当前选中的 SkillDataSO 资产打开技能编辑器。</summary>
         [MenuItem("Tech-Cosmos/SkillSystem/Open Skill Editor", priority = 5)]
         public static void OpenFromSelection()
         {
@@ -104,6 +116,7 @@ namespace TechCosmos.SkillSystem.Editor
             window.Show();
         }
 
+        /// <summary>设置当前编辑的 SkillDataSO 目标并刷新界面。</summary>
         public void SetTarget(SkillDataSO target)
         {
             if (target == null)
@@ -197,26 +210,20 @@ namespace TechCosmos.SkillSystem.Editor
         {
             var keys = new HashSet<string>();
 
-            if (currentTarget?.Conditions != null)
+            foreach (var cond in ConditionTreeEditorUtility.EnumerateAllConditions(currentTarget))
             {
-                foreach (var cond in currentTarget.Conditions)
-                {
-                    if (cond == null) continue;
-                    var attrs = cond.GetType().GetCustomAttributes<RequiredDataAttribute>();
-                    foreach (var attr in attrs)
-                        keys.Add(attr.Key);
-                }
+                if (cond == null) continue;
+                var attrs = cond.GetType().GetCustomAttributes<RequiredDataAttribute>();
+                foreach (var attr in attrs)
+                    keys.Add(attr.Key);
             }
 
-            if (currentTarget?.Mechanisms != null)
+            foreach (var mech in MechanismTreeEditorUtility.EnumerateAllMechanisms(currentTarget))
             {
-                foreach (var mech in currentTarget.Mechanisms)
-                {
-                    if (mech == null) continue;
-                    var attrs = mech.GetType().GetCustomAttributes<RequiredDataAttribute>();
-                    foreach (var attr in attrs)
-                        keys.Add(attr.Key);
-                }
+                if (mech == null) continue;
+                var attrs = mech.GetType().GetCustomAttributes<RequiredDataAttribute>();
+                foreach (var attr in attrs)
+                    keys.Add(attr.Key);
             }
 
             return keys;
@@ -268,8 +275,10 @@ namespace TechCosmos.SkillSystem.Editor
 
             DrawHeader();
             DrawBaseInfo();
+            DrawProfile();
             DrawConditions();
             DrawMechanisms();
+            DrawTimeline();
             DrawCustomProperties();
             DrawResources();
             DrawDataLayer();
@@ -434,16 +443,34 @@ namespace TechCosmos.SkillSystem.Editor
             }
         }
 
+        private void DrawProfile()
+        {
+            DrawSectionHeader("执行配置");
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("Profile"), true);
+            EditorGUILayout.EndVertical();
+        }
+
         private void DrawConditions()
         {
             DrawSectionHeader("条件层");
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("Conditions"), new GUIContent("条件列表"), true);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            ConditionTreeEditor.Draw(serializedObject, currentTarget);
+            EditorGUILayout.EndVertical();
+        }
+
+        private void DrawTimeline()
+        {
+            DrawSectionHeader("技能 Timeline");
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            SkillTimelineEditor.Draw(serializedObject);
+            EditorGUILayout.EndVertical();
         }
 
         private void DrawMechanisms()
         {
             DrawSectionHeader("机制层");
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("Mechanisms"), new GUIContent("机制列表"), true);
+            MechanismTreeEditor.Draw(serializedObject, currentTarget);
         }
 
         private void DrawCustomProperties()
@@ -1091,7 +1118,7 @@ namespace TechCosmos.SkillSystem.Editor
         {
             var keySources = new Dictionary<string, List<(Type Type, Type ExpectedType)>>();
 
-            foreach (var c in currentTarget.Conditions ?? Enumerable.Empty<ConditionBase>())
+            foreach (var c in ConditionTreeEditorUtility.EnumerateAllConditions(currentTarget))
             {
                 if (c == null) continue;
                 foreach (var attr in c.GetType().GetCustomAttributes<RequiredDataAttribute>())
@@ -1102,7 +1129,7 @@ namespace TechCosmos.SkillSystem.Editor
                 }
             }
 
-            foreach (var m in currentTarget.Mechanisms ?? Enumerable.Empty<MechanismBase>())
+            foreach (var m in MechanismTreeEditorUtility.EnumerateAllMechanisms(currentTarget))
             {
                 if (m == null) continue;
                 foreach (var attr in m.GetType().GetCustomAttributes<RequiredDataAttribute>())
@@ -1130,17 +1157,15 @@ namespace TechCosmos.SkillSystem.Editor
         {
             var allAttrs = new List<RequiredDataAttribute>();
 
-            if (currentTarget.Conditions != null)
-                foreach (var c in currentTarget.Conditions)
-                    if (c != null)
-                        allAttrs.AddRange(c.GetType().GetCustomAttributes<RequiredDataAttribute>()
-                            .Where(a => a.Key == key));
+            foreach (var c in ConditionTreeEditorUtility.EnumerateAllConditions(currentTarget))
+                if (c != null)
+                    allAttrs.AddRange(c.GetType().GetCustomAttributes<RequiredDataAttribute>()
+                        .Where(a => a.Key == key));
 
-            if (currentTarget.Mechanisms != null)
-                foreach (var m in currentTarget.Mechanisms)
-                    if (m != null)
-                        allAttrs.AddRange(m.GetType().GetCustomAttributes<RequiredDataAttribute>()
-                            .Where(a => a.Key == key));
+            foreach (var m in MechanismTreeEditorUtility.EnumerateAllMechanisms(currentTarget))
+                if (m != null)
+                    allAttrs.AddRange(m.GetType().GetCustomAttributes<RequiredDataAttribute>()
+                        .Where(a => a.Key == key));
 
             var attr = allAttrs.FirstOrDefault();
             if (attr == null) return;
@@ -1181,7 +1206,7 @@ namespace TechCosmos.SkillSystem.Editor
         {
             var owners = new List<(string name, string type)>();
 
-            foreach (var c in currentTarget.Conditions ?? Enumerable.Empty<ConditionBase>())
+            foreach (var c in ConditionTreeEditorUtility.EnumerateAllConditions(currentTarget))
             {
                 if (c == null) continue;
                 var attr = c.GetType().GetCustomAttributes<RequiredDataAttribute>()
@@ -1193,7 +1218,7 @@ namespace TechCosmos.SkillSystem.Editor
                 }
             }
 
-            foreach (var m in currentTarget.Mechanisms ?? Enumerable.Empty<MechanismBase>())
+            foreach (var m in MechanismTreeEditorUtility.EnumerateAllMechanisms(currentTarget))
             {
                 if (m == null) continue;
                 var attr = m.GetType().GetCustomAttributes<RequiredDataAttribute>()
@@ -1242,7 +1267,7 @@ namespace TechCosmos.SkillSystem.Editor
         {
             if (currentTarget == null) return null;
 
-            foreach (var c in currentTarget.Conditions ?? Enumerable.Empty<ConditionBase>())
+            foreach (var c in ConditionTreeEditorUtility.EnumerateAllConditions(currentTarget))
             {
                 if (c == null) continue;
                 var attr = c.GetType().GetCustomAttributes<RequiredDataAttribute>()
@@ -1250,7 +1275,7 @@ namespace TechCosmos.SkillSystem.Editor
                 if (attr?.Description != null) return attr.Description;
             }
 
-            foreach (var m in currentTarget.Mechanisms ?? Enumerable.Empty<MechanismBase>())
+            foreach (var m in MechanismTreeEditorUtility.EnumerateAllMechanisms(currentTarget))
             {
                 if (m == null) continue;
                 var attr = m.GetType().GetCustomAttributes<RequiredDataAttribute>()
@@ -1332,7 +1357,7 @@ namespace TechCosmos.SkillSystem.Editor
         {
             if (string.IsNullOrEmpty(key)) return null;
 
-            foreach (var c in currentTarget.Conditions ?? Enumerable.Empty<ConditionBase>())
+            foreach (var c in ConditionTreeEditorUtility.EnumerateAllConditions(currentTarget))
             {
                 if (c == null) continue;
                 var attr = c.GetType().GetCustomAttributes<RequiredDataAttribute>()
@@ -1340,7 +1365,7 @@ namespace TechCosmos.SkillSystem.Editor
                 if (attr?.AllowedTypes != null) return attr.AllowedTypes;
             }
 
-            foreach (var m in currentTarget.Mechanisms ?? Enumerable.Empty<MechanismBase>())
+            foreach (var m in MechanismTreeEditorUtility.EnumerateAllMechanisms(currentTarget))
             {
                 if (m == null) continue;
                 var attr = m.GetType().GetCustomAttributes<RequiredDataAttribute>()

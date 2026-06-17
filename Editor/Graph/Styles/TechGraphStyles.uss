@@ -1,0 +1,28 @@
+.tech-graph-node-title {
+    -unity-font-style: bold;
+    color: rgb(210, 220, 240);
+}
+
+.tech-graph-inspector {
+    padding: 6px;
+    background-color: rgb(46, 46, 48);
+    border-top-width: 1px;
+    border-top-color: rgb(70, 70, 75);
+}
+
+.tech-graph-toolbar {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 8px;
+    padding-right: 8px;
+    height: 28px;
+    background-color: rgb(56, 56, 58);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(35, 35, 38);
+}
+
+.tech-graph-toolbar-label {
+    color: rgb(180, 190, 210);
+    -unity-font-style: bold;
+    margin-right: 12px;
+}

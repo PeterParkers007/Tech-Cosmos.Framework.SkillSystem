@@ -1,8 +1,11 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace TechCosmos.SkillSystem.Runtime
 {
+    /// <summary>
+    /// 逻辑与组合条件：所有子条件均满足时返回 true。
+    /// </summary>
     public class AndCondition<T> : Condition<T> where T : class, IUnit<T>
     {
         private List<Condition<T>> _conditions;
@@ -60,7 +63,13 @@ namespace TechCosmos.SkillSystem.Runtime
             }
         }
 
-        // 重新初始化
+        public override void OnReset()
+        {
+            for (int i = 0; i < _conditions.Count; i++)
+                _conditions[i]?.OnReset();
+        }
+
+        /// <summary>重新初始化子条件列表。</summary>
         public void Reinitialize(params Condition<T>[] conditions)
         {
             _conditions.Clear();
@@ -82,6 +91,7 @@ namespace TechCosmos.SkillSystem.Runtime
             if (c != null) _conditions.Add(c);
         }
 
+        /// <summary>清空子条件（用于对象池归还）。</summary>
         public void Clear()
         {
             _conditions.Clear();

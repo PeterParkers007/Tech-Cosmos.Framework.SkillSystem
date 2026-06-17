@@ -1,0 +1,16 @@
+{
+    "name": "TechCosmos.SkillSystem.Samples.Demo",
+    "rootNamespace": "TechCosmos.SkillSystem.Samples",
+    "references": [
+        "TechCosmos.SkillSystem.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

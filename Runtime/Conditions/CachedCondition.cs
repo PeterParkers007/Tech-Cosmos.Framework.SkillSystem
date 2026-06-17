@@ -1,5 +1,8 @@
 namespace TechCosmos.SkillSystem.Runtime
 {
+    /// <summary>
+    /// 缓存装饰条件：同一施法上下文内复用上次判定结果。
+    /// </summary>
     public class CachedCondition<T> : Condition<T> where T : class, IUnit<T>
     {
         private Condition<T> _inner;

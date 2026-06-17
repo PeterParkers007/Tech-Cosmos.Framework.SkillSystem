@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
 using System;
@@ -6,11 +6,15 @@ using System.Collections.Generic;
 using System.Linq;
 using TechCosmos.SkillSystem.Runtime;
 
+/// <summary>
+/// 机制（MechanismBase）的 Inspector 属性绘制器，支持选择、切换、复制与删除。
+/// </summary>
 [CustomPropertyDrawer(typeof(MechanismBase), true)]
 public class MechanismDrawer : PropertyDrawer
 {
     private Dictionary<string, List<Type>> typeCache = new();
 
+    /// <summary>绘制机制字段的 Inspector UI。</summary>
     public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
     {
         EditorGUI.BeginProperty(position, label, property);
@@ -98,6 +102,7 @@ public class MechanismDrawer : PropertyDrawer
         EditorGUI.EndProperty();
     }
 
+    /// <summary>根据展开状态计算机制字段的绘制高度。</summary>
     public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
     {
         if (property.managedReferenceValue == null)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace TechCosmos.SkillSystem.Runtime
 {
@@ -55,16 +55,24 @@ namespace TechCosmos.SkillSystem.Runtime
         /// </summary>
         public virtual void OnConditionFailed(SkillContext<T> skillContext, IDataLayer<T> dataLayer) { }
 
+        /// <summary>
+        /// 技能被移除或重置时的回调
+        /// </summary>
+        public override void OnReset() { }
+
         #endregion
 
         #region 运算符重载
 
+        /// <summary>逻辑与组合（使用对象池）。</summary>
         public static Condition<T> operator &(Condition<T> left, Condition<T> right)
             => ConditionPool<T>.RentAnd(left, right);
 
+        /// <summary>逻辑或组合（使用对象池）。</summary>
         public static Condition<T> operator |(Condition<T> left, Condition<T> right)
             => ConditionPool<T>.RentOr(left, right);
 
+        /// <summary>逻辑非（使用对象池）。</summary>
         public static Condition<T> operator !(Condition<T> condition)
             => ConditionPool<T>.RentNot(condition);
 

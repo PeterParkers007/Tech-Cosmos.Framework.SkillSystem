@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
 using System;
@@ -8,6 +8,9 @@ using System.Collections.Generic;
 
 namespace TechCosmos.SkillSystem.Editor
 {
+    /// <summary>
+    /// TriggerEventType 枚举的可视化编辑器，支持手动增删事件并生成代码文件。
+    /// </summary>
     public class TriggerEventEnumEditor : EditorWindow
     {
         private List<string> events = new();
@@ -17,6 +20,7 @@ namespace TechCosmos.SkillSystem.Editor
 
         private const string ENUM_FILE_PATH = "Assets/Generated/TriggerEventType.cs";
 
+        /// <summary>打开 TriggerEvent 枚举编辑器窗口。</summary>
         [MenuItem("Tech-Cosmos/SkillSystem/TriggerEvent Enum Editor")]
         public static void OpenWindow()
         {

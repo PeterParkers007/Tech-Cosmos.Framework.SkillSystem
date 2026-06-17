@@ -1,130 +1,111 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using UnityEngine;
-using System.Globalization;
 
 namespace TechCosmos.SkillSystem.Runtime
 {
+    /// <summary>
+    /// ÊäÄËÉΩÂÖ¨ÂºèÊ±ÇÂÄºÂô®ÔºåÊîØÊåÅ caster/target Â±ûÊÄßÂºïÁî®„ÄÅrandom() ‰∏éÂõõÂàôËøêÁÆó„ÄÇ
+    /// </summary>
     public static class FormulaEvaluator
     {
+        private static readonly Regex ReferenceRegex =
+            new(@"\b(caster|target)\.([\w.]+)\b", RegexOptions.Compiled);
+
+        private static readonly Regex RandomRegex =
+            new(@"random\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)", RegexOptions.Compiled);
+
+        private static readonly Regex MulDivTokenRegex =
+            new(@"(-?\d+\.?\d*|[\*/])", RegexOptions.Compiled);
+
+        private static readonly Regex AddSubRegex =
+            new(@"(-?\d+\.?\d*|[+\-])", RegexOptions.Compiled);
+
+        private static readonly Dictionary<string, float> _expressionCache = new();
+
         public static float Evaluate<T>(SkillContext<T> context, string formula) where T : class, IUnit<T>
         {
-            if (string.IsNullOrEmpty(formula))
-                return 0f;
+            if (string.IsNullOrEmpty(formula)) return 0f;
 
+            SkillProfilerMarkers.Formula.Begin();
             try
             {
                 var baseContext = (SkillContextBase)context;
-                var resolved = ResolveReferences(baseContext, formula);
-                resolved = ResolveRandomFunctions(resolved);
-                return EvaluateExpression(resolved);
+                var random = context.meta.ResolveRandom();
+                var resolved = ResolveReferences(baseContext, formula, random);
+                return EvaluateExpressionStatic(resolved);
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"π´ ΩΩ‚Œˆ ß∞‹: {formula}\n{e.Message}");
+                Debug.LogWarning($"[FormulaEvaluator] ÂÖ¨ÂºèÊ±ÇÂÄºÂ§±Ë¥•: {formula}\n{e.Message}");
                 return 0f;
+            }
+            finally
+            {
+                SkillProfilerMarkers.Formula.End();
             }
         }
 
-        public static float Evaluate(SkillContextBase context, string formula)
+        public static float Evaluate(SkillContextBase context, string formula, IRandomProvider random = null)
         {
-            if (string.IsNullOrEmpty(formula))
-                return 0f;
-
-            try
-            {
-                var resolved = ResolveReferences(context, formula);
-                resolved = ResolveRandomFunctions(resolved);
-                return EvaluateExpression(resolved);
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"π´ ΩΩ‚Œˆ ß∞‹: {formula}\n{e.Message}");
-                return 0f;
-            }
+            if (string.IsNullOrEmpty(formula)) return 0f;
+            random ??= SkillSystemServices.Random;
+            var resolved = ResolveReferences(context, formula, random);
+            return EvaluateExpressionStatic(resolved);
         }
 
-        private static string ResolveReferences(SkillContextBase context, string formula)
+        public static float EvaluateExpressionStatic(string expression)
         {
-            var regex = new Regex(@"\b(caster|target)\.([\w.]+)\b");
-            return regex.Replace(formula, match =>
-            {
-                var source = match.Groups[1].Value;
-                var path = match.Groups[2].Value;
-                var value = ResolvePath(context, source, path);
-                return value.ToString(CultureInfo.InvariantCulture);
-            });
-        }
-
-        private static string ResolveRandomFunctions(string expression)
-        {
-            var regex = new Regex(@"random\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)");
-            return regex.Replace(expression, match =>
-            {
-                float min = float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-                float max = float.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
-                return UnityEngine.Random.Range(min, max).ToString(CultureInfo.InvariantCulture);
-            });
-        }
-
-        private static float ResolvePath(SkillContextBase context, string source, string path)
-        {
-            object obj = source switch
-            {
-                "caster" => context.Caster,
-                "target" => context.Target,
-                _ => null
-            };
-
-            if (obj == null) return 0f;
-
-            var parts = path.Split('.');
-            foreach (var part in parts)
-            {
-                if (obj == null) return 0f;
-
-                var type = obj.GetType();
-
-                var property = type.GetProperty(part, BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
-                if (property != null && property.CanRead)
-                {
-                    obj = property.GetValue(obj);
-                    continue;
-                }
-
-                var field = type.GetField(part, BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
-                if (field != null)
-                {
-                    obj = field.GetValue(obj);
-                    continue;
-                }
-
-                return 0f;
-            }
-
-            return obj switch
-            {
-                float f => f,
-                int i => i,
-                double d => (float)d,
-                bool b => b ? 1f : 0f,
-                long l => l,
-                short s => s,
-                byte bt => bt,
-                _ => 0f
-            };
-        }
-
-        private static float EvaluateExpression(string expression)
-        {
-            if (string.IsNullOrWhiteSpace(expression))
-                return 0f;
+            if (string.IsNullOrWhiteSpace(expression)) return 0f;
+            if (_expressionCache.TryGetValue(expression, out var cached)) return cached;
 
             expression = expression.Replace(" ", "");
             expression = ResolveParentheses(expression);
-            return EvaluateNoParentheses(expression);
+            var result = EvaluateNoParentheses(expression);
+            if (_expressionCache.Count < 512)
+                _expressionCache[expression] = result;
+            return result;
+        }
+
+        public static void ClearCache()
+        {
+            _expressionCache.Clear();
+            PathResolver.ClearCache();
+        }
+
+        public static float ToFloat(object obj) => obj switch
+        {
+            float f => f,
+            int i => i,
+            double d => (float)d,
+            bool b => b ? 1f : 0f,
+            long l => l,
+            short s => s,
+            byte bt => bt,
+            _ => 0f
+        };
+
+        private static string ResolveReferences(SkillContextBase context, string formula, IRandomProvider random)
+        {
+            var resolved = ReferenceRegex.Replace(formula, match =>
+            {
+                var source = match.Groups[1].Value;
+                var path = match.Groups[2].Value;
+                var value = PathResolver.Resolve(context, source, path);
+                return value.ToString(CultureInfo.InvariantCulture);
+            });
+
+            resolved = RandomRegex.Replace(resolved, match =>
+            {
+                float min = float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+                float max = float.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
+                return random.Range(min, max).ToString(CultureInfo.InvariantCulture);
+            });
+
+            return resolved;
         }
 
         private static string ResolveParentheses(string expr)
@@ -135,14 +116,13 @@ namespace TechCosmos.SkillSystem.Runtime
                 int end = expr.IndexOf(')', start);
                 if (end < 0)
                 {
-                    Debug.LogWarning($"π´ Ω¿®∫≈≤ª∆•≈‰: {expr}");
+                    Debug.LogWarning($"[FormulaEvaluator] ÂÖ¨ÂºèÊã¨Âè∑‰∏çÂåπÈÖç: {expr}");
                     return expr.Replace("(", "").Replace(")", "");
                 }
 
                 string inner = expr.Substring(start + 1, end - start - 1);
                 float innerResult = EvaluateNoParentheses(inner);
                 string innerStr = innerResult.ToString(CultureInfo.InvariantCulture);
-
                 expr = expr.Substring(0, start) + innerStr + expr.Substring(end + 1);
                 start = expr.LastIndexOf('(');
             }
@@ -152,9 +132,7 @@ namespace TechCosmos.SkillSystem.Runtime
 
         private static float EvaluateNoParentheses(string expr)
         {
-            if (string.IsNullOrEmpty(expr))
-                return 0f;
-
+            if (string.IsNullOrEmpty(expr)) return 0f;
             expr = HandleUnaryMinus(expr);
             expr = EvaluateMultiplyDivide(expr);
             expr = EvaluateAddSubtract(expr);
@@ -168,26 +146,19 @@ namespace TechCosmos.SkillSystem.Runtime
         private static string HandleUnaryMinus(string expr)
         {
             if (string.IsNullOrEmpty(expr)) return expr;
-
-            if (expr[0] == '-')
-                expr = "0" + expr;
-
+            if (expr[0] == '-') expr = "0" + expr;
             expr = expr.Replace("(-", "(0-");
-
             return expr;
         }
 
         private static string EvaluateMultiplyDivide(string expr)
         {
             var tokens = Tokenize(expr);
-
             for (int i = 0; i < tokens.Count; i++)
             {
-                string token = tokens[i];
-                if (token.Contains("*") || token.Contains("/"))
-                    tokens[i] = EvaluateMulDivToken(token);
+                if (tokens[i].Contains("*") || tokens[i].Contains("/"))
+                    tokens[i] = EvaluateMulDivToken(tokens[i]);
             }
-
             return string.Join("", tokens);
         }
 
@@ -196,8 +167,7 @@ namespace TechCosmos.SkillSystem.Runtime
             var numbers = new List<float>();
             var operators = new List<char>();
 
-            var regex = new Regex(@"(-?\d+\.?\d*|[\*/])");
-            foreach (Match match in regex.Matches(token))
+            foreach (Match match in MulDivTokenRegex.Matches(token))
             {
                 string val = match.Value;
                 if (val == "*" || val == "/")
@@ -212,10 +182,7 @@ namespace TechCosmos.SkillSystem.Runtime
             for (int i = 0; i < operators.Count; i++)
             {
                 float next = numbers[i + 1];
-                if (operators[i] == '*')
-                    result *= next;
-                else if (operators[i] == '/')
-                    result = next != 0 ? result / next : 0;
+                result = operators[i] == '*' ? result * next : (next != 0 ? result / next : 0);
             }
 
             return result.ToString(CultureInfo.InvariantCulture);
@@ -225,11 +192,9 @@ namespace TechCosmos.SkillSystem.Runtime
         {
             var numbers = new List<float>();
             var operators = new List<char>();
-
-            var regex = new Regex(@"(-?\d+\.?\d*|[+\-])");
             bool expectNumber = true;
 
-            foreach (Match match in regex.Matches(expr))
+            foreach (Match match in AddSubRegex.Matches(expr))
             {
                 string val = match.Value;
                 if ((val == "+" || val == "-") && !expectNumber)
@@ -250,10 +215,7 @@ namespace TechCosmos.SkillSystem.Runtime
             for (int i = 0; i < operators.Count; i++)
             {
                 float next = numbers[i + 1];
-                if (operators[i] == '+')
-                    result += next;
-                else if (operators[i] == '-')
-                    result -= next;
+                result = operators[i] == '+' ? result + next : result - next;
             }
 
             return result.ToString(CultureInfo.InvariantCulture);
@@ -263,7 +225,6 @@ namespace TechCosmos.SkillSystem.Runtime
         {
             var tokens = new List<string>();
             int lastIndex = 0;
-
             for (int i = 1; i < expr.Length; i++)
             {
                 if ((expr[i] == '+' || expr[i] == '-') && expr[i - 1] != '*' && expr[i - 1] != '/')
@@ -272,9 +233,64 @@ namespace TechCosmos.SkillSystem.Runtime
                     lastIndex = i;
                 }
             }
-
             tokens.Add(expr.Substring(lastIndex));
             return tokens;
+        }
+
+        private static class PathResolver
+        {
+            private static readonly Dictionary<string, Func<SkillContextBase, float>> _cache = new();
+
+            public static void ClearCache() => _cache.Clear();
+
+            public static float Resolve(SkillContextBase context, string source, string path)
+            {
+                var key = source + "." + path;
+                if (!_cache.TryGetValue(key, out var resolver))
+                {
+                    resolver = BuildResolver(source, path);
+                    _cache[key] = resolver;
+                }
+                return resolver(context);
+            }
+
+            private static Func<SkillContextBase, float> BuildResolver(string source, string path)
+            {
+                var parts = path.Split('.');
+                return ctx =>
+                {
+                    object obj = source switch
+                    {
+                        "caster" => ctx.Caster,
+                        "target" => ctx.Target,
+                        _ => null
+                    };
+
+                    foreach (var part in parts)
+                    {
+                        if (obj == null) return 0f;
+                        var type = obj.GetType();
+
+                        var property = type.GetProperty(part, BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+                        if (property != null && property.CanRead)
+                        {
+                            obj = property.GetValue(obj);
+                            continue;
+                        }
+
+                        var field = type.GetField(part, BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+                        if (field != null)
+                        {
+                            obj = field.GetValue(obj);
+                            continue;
+                        }
+
+                        return 0f;
+                    }
+
+                    return ToFloat(obj);
+                };
+            }
         }
     }
 }

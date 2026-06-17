@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using System;
 using System.IO;
 using System.Linq;
@@ -10,6 +10,9 @@ using TechCosmos.SkillSystem.Runtime;
 
 namespace TechCosmos.SkillSystem.Editor
 {
+    /// <summary>
+    /// 机制与条件泛型类的代码生成器，扫描特性并输出封闭类型 .g.cs 文件。
+    /// </summary>
     public static class MechanismCodeGeneratorV2
     {
         private const string MECHANISM_FOLDER = "Assets/Generated/Mechanisms";
@@ -17,14 +20,17 @@ namespace TechCosmos.SkillSystem.Editor
 
         #region 菜单项 - 统一在 SkillSystem/Generator 下
 
+        /// <summary>生成机制、条件、SkillDataSO 并更新触发事件枚举。</summary>
         [MenuItem("Tech-Cosmos/SkillSystem/Generator/Generate ALL Classes", priority = 0)]
         public static void GenerateAllClasses()
         {
             GenerateMechanismClasses();
             GenerateConditionClasses();
             SkillDataSOGenerator.GenerateAllSkillDataSO();
+            TriggerEventEnumGenerator.UpdateTriggerEventEnum();
         }
 
+        /// <summary>为标记了 AutoGenerateMechanism 的泛型机制生成封闭子类。</summary>
         [MenuItem("Tech-Cosmos/SkillSystem/Generator/Generate Mechanism Classes", priority = 10)]
         public static void GenerateMechanismClasses()
         {
@@ -36,6 +42,7 @@ namespace TechCosmos.SkillSystem.Editor
             );
         }
 
+        /// <summary>为标记了 AutoGenerateCondition 的泛型条件生成封闭子类。</summary>
         [MenuItem("Tech-Cosmos/SkillSystem/Generator/Generate Condition Classes", priority = 11)]
         public static void GenerateConditionClasses()
         {
@@ -205,9 +212,7 @@ namespace {ns}.Generated.{subFolder}
 
         #region 工具方法
 
-        /// <summary>
-        /// 获取类型在菜单中的简短分组名
-        /// </summary>
+        /// <summary>获取类型在菜单中的简短分组名。</summary>
         public static string GetShortGroupName(Type type)
         {
             var name = GetCleanTypeName(type).ToLower();
@@ -226,9 +231,7 @@ namespace {ns}.Generated.{subFolder}
             return lastDot >= 0 ? ns.Substring(lastDot + 1) : ns;
         }
 
-        /// <summary>
-        /// 获取类型的干净名称，去掉泛型标记
-        /// </summary>
+        /// <summary>获取类型的干净名称，去掉泛型反引号标记。</summary>
         public static string GetCleanTypeName(Type type)
         {
             var name = type.Name;

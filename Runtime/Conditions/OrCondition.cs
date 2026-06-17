@@ -1,8 +1,11 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace TechCosmos.SkillSystem.Runtime
 {
+    /// <summary>
+    /// 逻辑或组合条件：任一子条件满足时返回 true。
+    /// </summary>
     public class OrCondition<T> : Condition<T> where T : class, IUnit<T>
     {
         private List<Condition<T>> _conditions;
@@ -42,13 +45,21 @@ namespace TechCosmos.SkillSystem.Runtime
             return false;
         }
 
-        // 转发成功回调到所有子条件
+        // 转发成功回调到满足条件的子条件
         public override void OnSkillExecuted(SkillContext<T> skillContext, IDataLayer<T> dataLayer)
         {
             for (int i = 0; i < _conditions.Count; i++)
             {
-                _conditions[i]?.OnSkillExecuted(skillContext, dataLayer);
+                var condition = _conditions[i];
+                if (condition != null && condition.IsEligible(skillContext, dataLayer))
+                    condition.OnSkillExecuted(skillContext, dataLayer);
             }
+        }
+
+        public override void OnReset()
+        {
+            for (int i = 0; i < _conditions.Count; i++)
+                _conditions[i]?.OnReset();
         }
 
         // 转发失败回调到所有子条件
@@ -60,6 +71,7 @@ namespace TechCosmos.SkillSystem.Runtime
             }
         }
 
+        /// <summary>重新初始化子条件列表。</summary>
         public void Reinitialize(params Condition<T>[] conditions)
         {
             _conditions.Clear();
@@ -81,6 +93,7 @@ namespace TechCosmos.SkillSystem.Runtime
             if (c != null) _conditions.Add(c);
         }
 
+        /// <summary>清空子条件（用于对象池归还）。</summary>
         public void Clear()
         {
             _conditions.Clear();

@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
 using System;
@@ -9,6 +9,9 @@ using TechCosmos.SkillSystem.Runtime;
 
 namespace TechCosmos.SkillSystem.Editor
 {
+    /// <summary>
+    /// 创建机制或条件脚本模板的编辑器窗口。
+    /// </summary>
     public class CreateSkillScriptWindow : EditorWindow
     {
         private enum ScriptType { Mechanism, Condition }
@@ -21,6 +24,7 @@ namespace TechCosmos.SkillSystem.Editor
         private Vector2 scrollPos;
         private string searchFilter = "";
         private bool typesDirty = true;
+        /// <summary>打开创建技能脚本窗口。</summary>
         [MenuItem("Tech-Cosmos/SkillSystem/Create Skill Script", priority = 1)]
         public static void OpenWindow()
         {
@@ -30,12 +34,14 @@ namespace TechCosmos.SkillSystem.Editor
             window.Show();
         }
 
+        /// <summary>从 Assets 菜单快速创建机制脚本模板。</summary>
         [MenuItem("Assets/Create/Tech-Cosmos/Skill Mechanism", priority = 30)]
         public static void CreateMechanismFromMenu()
         {
             ShowWindowAndCreate(ScriptType.Mechanism);
         }
 
+        /// <summary>从 Assets 菜单快速创建条件脚本模板。</summary>
         [MenuItem("Assets/Create/Tech-Cosmos/Skill Condition", priority = 31)]
         public static void CreateConditionFromMenu()
         {

@@ -2,6 +2,9 @@ using System.Collections.Generic;
 
 namespace TechCosmos.SkillSystem.Runtime
 {
+    /// <summary>
+    /// 条件层：按顺序检查所有前置条件。
+    /// </summary>
     public class ConditionLayer<T> : IConditionLayer<T> where T : class, IUnit<T>
     {
         public List<Condition<T>> Conditions { get; set; }

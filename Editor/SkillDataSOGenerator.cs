@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using System;
 using System.IO;
 using System.Linq;
@@ -11,6 +11,9 @@ using TechCosmos.SkillSystem.Runtime;
 
 namespace TechCosmos.SkillSystem.Editor
 {
+    /// <summary>
+    /// 根据 Unit 类型上的特性自动生成 SkillDataSO 子类代码。
+    /// </summary>
     public static class SkillDataSOGenerator
     {
         private const string GENERATED_FOLDER = "Assets/Generated/SkillDataSO";
@@ -39,6 +42,7 @@ namespace TechCosmos.SkillSystem.Editor
             "GameObject", "Transform"
         };
 
+        /// <summary>扫描所有 IUnit 实现并生成对应的 SkillDataSO 类。</summary>
         [MenuItem("Tech-Cosmos/SkillSystem/Generator/Generate All SkillDataSO")]
         public static void GenerateAllSkillDataSO()
         {

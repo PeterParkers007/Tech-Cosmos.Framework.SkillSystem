@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
 using System;
@@ -9,6 +9,9 @@ using TechCosmos.SkillSystem.Runtime;
 
 namespace TechCosmos.SkillSystem.Editor
 {
+    /// <summary>
+    /// SkillDataSO 资产的自定义 Inspector，分组展示属性、条件、机制与数值层。
+    /// </summary>
     [CustomEditor(typeof(SkillDataSO), true)]
     public class SkillDataSOEditor : UnityEditor.Editor
     {
@@ -74,6 +77,7 @@ namespace TechCosmos.SkillSystem.Editor
             return tooltip;
         }
 
+        /// <summary>绘制 SkillDataSO 的完整 Inspector 界面。</summary>
         public override void OnInspectorGUI()
         {
             RefreshProperties();
@@ -96,7 +100,7 @@ namespace TechCosmos.SkillSystem.Editor
             EditorGUILayout.LabelField("基础信息", EditorStyles.boldLabel);
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillType"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("TriggerEvent"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("TriggerEvents"), new GUIContent("触发事件"), true);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillName"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillDescription"));
             EditorGUILayout.EndVertical();

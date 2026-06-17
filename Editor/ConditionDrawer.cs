@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
 using System;
@@ -8,11 +8,15 @@ using TechCosmos.SkillSystem.Runtime;
 
 namespace TechCosmos.SkillSystem.Editor
 {
+    /// <summary>
+    /// 条件（ConditionBase）的 Inspector 属性绘制器，支持选择与切换条件类型。
+    /// </summary>
     [CustomPropertyDrawer(typeof(ConditionBase), true)]
     public class ConditionDrawer : PropertyDrawer
     {
         private Dictionary<string, List<Type>> typeCache = new();
 
+        /// <summary>绘制条件字段的 Inspector UI。</summary>
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             EditorGUI.BeginProperty(position, label, property);
@@ -94,6 +98,7 @@ namespace TechCosmos.SkillSystem.Editor
             EditorGUI.EndProperty();
         }
 
+        /// <summary>根据展开状态计算条件字段的绘制高度。</summary>
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
         {
             if (property.managedReferenceValue == null)
@@ -208,9 +213,14 @@ namespace TechCosmos.SkillSystem.Editor
             // 按优先级排序
             types = types.OrderBy(t =>
             {
-                var attr = t.GetCustomAttributes(typeof(MechanismMenuAttribute), false)
+                var condAttr = t.GetCustomAttributes(typeof(ConditionMenuAttribute), false)
+                    .FirstOrDefault() as ConditionMenuAttribute;
+                if (condAttr != null)
+                    return condAttr.Priority;
+
+                var mechAttr = t.GetCustomAttributes(typeof(MechanismMenuAttribute), false)
                     .FirstOrDefault() as MechanismMenuAttribute;
-                return attr?.Priority ?? 99;
+                return mechAttr?.Priority ?? 99;
             }).ToList();
 
             typeCache[cacheKey] = types;
@@ -219,10 +229,15 @@ namespace TechCosmos.SkillSystem.Editor
 
         private string GetMenuCategory(Type type)
         {
-            var attr = type.GetCustomAttributes(typeof(MechanismMenuAttribute), false)
+            var condAttr = type.GetCustomAttributes(typeof(ConditionMenuAttribute), false)
+                .FirstOrDefault() as ConditionMenuAttribute;
+            if (condAttr != null)
+                return condAttr.Category;
+
+            var mechAttr = type.GetCustomAttributes(typeof(MechanismMenuAttribute), false)
                 .FirstOrDefault() as MechanismMenuAttribute;
-            if (attr != null)
-                return attr.Category;
+            if (mechAttr != null)
+                return mechAttr.Category;
 
             var name = type.Name.ToLower();
 
@@ -238,10 +253,15 @@ namespace TechCosmos.SkillSystem.Editor
 
         private string GetFriendlyDisplayName(Type type)
         {
-            var attr = type.GetCustomAttributes(typeof(MechanismMenuAttribute), false)
+            var condAttr = type.GetCustomAttributes(typeof(ConditionMenuAttribute), false)
+                .FirstOrDefault() as ConditionMenuAttribute;
+            if (condAttr?.DisplayName != null)
+                return condAttr.DisplayName;
+
+            var mechAttr = type.GetCustomAttributes(typeof(MechanismMenuAttribute), false)
                 .FirstOrDefault() as MechanismMenuAttribute;
-            if (attr?.DisplayName != null)
-                return attr.DisplayName;
+            if (mechAttr?.DisplayName != null)
+                return mechAttr.DisplayName;
 
             var name = type.Name;
 

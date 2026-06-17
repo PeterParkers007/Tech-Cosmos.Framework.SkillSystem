@@ -1,0 +1,23 @@
+{
+    "name": "TechCosmos.SkillSystem.Tests",
+    "rootNamespace": "TechCosmos.SkillSystem.Tests",
+    "references": [
+        "TechCosmos.SkillSystem.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

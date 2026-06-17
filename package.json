@@ -1,8 +1,8 @@
 {
   "name": "com.techcosmos.skillsystem",
   "displayName": "SkillSystem",
-  "version": "1.0.0",
-  "description": "A highly extensible, generic skill system framework for Unity games. Supports customizable conditions, mechanisms, and multi-layer skill architecture.",
+  "version": "2.3.0",
+  "description": "Enterprise-grade extensible skill system for Unity: condition tree, skill timeline editor, integrated GBF buff framework, Shader Graph-style visual editor, cast/channel state machine, samples, and rich editor tooling.",
   "keywords": [
     "skill",
     "framework",
@@ -11,7 +11,10 @@
     "rpg",
     "game",
     "extensible",
-    "generic"
+    "generic",
+    "buff",
+    "combat",
+    "timeline"
   ],
   "category": "Gameplay",
   "author": {
@@ -20,5 +23,12 @@
     "url": "https://github.com/PeterParkers007/Tech-Cosmos"
   },
   "unity": "2022.3",
-  "unityRelease": "0f1"
+  "unityRelease": "0f1",
+  "samples": [
+    {
+      "displayName": "Skill System Demo",
+      "description": "Complete demo scene with DemoCharacter, damage/heal mechanisms, condition tree, and timeline.",
+      "path": "Samples~/Demo"
+    }
+  ]
 }
