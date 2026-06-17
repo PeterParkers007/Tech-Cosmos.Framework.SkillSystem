@@ -1,1248 +1,1156 @@
-# 🎮 TechCosmos 技能系统框架 (TechCosmos Skill System)
+# TechCosmos 技能系统 (Skill System)
 
-> **Unity 版本**: 2021.3+ | **语言**: C# 9.0+
+> **包名**: `com.techcosmos.skillsystem`  
+> **当前版本**: **2.3.0**  
+> **Unity**: 2022.3+  
+> **语言**: C# 9.0+ / .NET Standard 2.1
+
+面向 Unity 的**企业级、数据驱动、可扩展**技能框架。将技能抽象为**六层架构**，内置 **Buff 子系统（GBF）**、**条件树 / 机制树**、**技能时间轴**、**施法状态机**、**执行管线与中间件**，并提供 Shader Graph 风格的**节点图编辑器**与完整的 **Editor 工具链**。
 
 ---
 
-## 📑 目录
+## 目录
 
-- [1. 概述](#1-概述)
-- [2. 核心特性](#2-核心特性)
-- [3. 架构设计](#3-架构设计)
-- [4. 快速开始](#4-快速开始)
-- [5. 核心概念](#5-核心概念)
-- [6. 编辑器工具](#6-编辑器工具)
+- [0. 版本亮点](#0-版本亮点)
+- [1. 5 分钟看懂](#1-5-分钟看懂)
+- [2. 安装与 Samples](#2-安装与-samples)
+- [3. 快速上手（完整流程）](#3-快速上手完整流程)
+- [4. 架构设计](#4-架构设计)
+- [5. 运行时系统详解](#5-运行时系统详解)
+  - [5.1 六层架构](#51-六层架构)
+  - [5.2 执行管线](#52-执行管线-skillexecutionpipeline)
+  - [5.3 施法控制器](#53-施法控制器-skillexecutioncontroller)
+  - [5.4 条件系统与条件树](#54-条件系统与条件树)
+  - [5.5 机制系统与机制树](#55-机制系统与机制树)
+  - [5.6 数据层与公式](#56-数据层与公式)
+  - [5.7 技能时间轴](#57-技能时间轴-timeline)
+  - [5.8 UnitBase 与事件系统](#58-unitbase-与事件系统)
+  - [5.9 Buff 子系统](#59-buff-子系统)
+  - [5.10 中间件](#510-中间件-iskillmiddleware)
+  - [5.11 网络扩展点](#511-网络扩展点)
+  - [5.12 黑板与执行元数据](#512-黑板与执行元数据)
+- [6. 编辑器工具指南](#6-编辑器工具指南)
 - [7. 代码生成系统](#7-代码生成系统)
-- [8. API 参考](#8-api-参考)
-- [9. 高级用法](#9-高级用法)
-- [10. 最佳实践](#10-最佳实践)
-- [11. 项目结构](#11-项目结构)
-- [12. 常见问题](#12-常见问题)
-
-> **v2.2.0+** 已内置完整 Buff 子系统（原 GBF），无需单独安装 `Tech-Cosmos.Framework.BuffSystem`。
+- [8. 实战食谱 (Cookbook)](#8-实战食谱-cookbook)
+- [9. API 速查](#9-api-速查)
+- [10. 项目结构](#10-项目结构)
+- [11. 最佳实践](#11-最佳实践)
+- [12. 常见问题 FAQ](#12-常见问题-faq)
+- [13. 版本升级说明](#13-版本升级说明)
 
 ---
 
-## 1. 概述
+## 0. 版本亮点
 
-TechCosmos 技能系统是一个专为 **Unity** 设计的、基于 **分层架构** 与 **领域驱动设计 (DDD)** 的 **模块化**、**数据驱动** 技能框架。它将技能的执行流程抽象为六个独立的层级，并**内置完整的 Buff/Debuff 子系统**（原 Generic Buff Framework），通过泛型和代码生成技术，在保持高度灵活性的同时提供了出色的编辑器体验。
-
-### 🎯 设计哲学
-
-| 原则 | 说明 |
+| 能力 | 说明 |
 |------|------|
-| **关注点分离** | 每个层级只负责自己的职责 |
-| **数据驱动** | 技能配置完全通过 ScriptableObject 管理 |
-| **泛型类型安全** | 编译时确保类型正确性 |
-| **编辑器优先** | 强大的自定义 Inspector 和代码生成 |
-| **性能优化** | 对象池、缓存数组、零 GC 分配 |
+| **条件树** | AND / OR / NOT / Ref，支持 `CompositeConditionSO` 复用 |
+| **机制树** | Sequence / Parallel / Ref，支持 `CompositeMechanismSO` 复用 |
+| **Timeline** | 技能成功执行后按时间轴触发机制或单位事件 |
+| **施法状态机** | 读条 `castTime`、引导 `channelTime`、打断与优先级 |
+| **执行管线** | 中间件 → 条件 → 机制 → 时间轴，带 Profiler 与 Trace |
+| **UnitBase** | 一行继承集成事件、技能容器、Buff、施法控制器 |
+| **内置 Buff** | 无需单独安装 BuffSystem 包 |
+| **Graph 编辑器** | Skill / Buff / Condition / Mechanism 节点图 |
+| **资产校验** | 一键扫描所有 SkillDataSO 配置问题 |
+| **Samples** | 可导入 Demo 场景（攻击 / 治疗 / Buff） |
+| **单元测试** | Formula / Tag / Buff / Cooldown / 条件树编译 |
+
+> v2.2.0 起 Buff 已内置；若项目中仍有旧包 `Tech-Cosmos.Framework.BuffSystem`，请删除以避免重复编译。
 
 ---
 
-## 2. 核心特性
+## 1. 5 分钟看懂
 
-### ✨ 九大核心特性
+### 技能是什么？
 
-1. **🏗️ 六层分层架构**
-   - 基础层 → 信息层 → 条件层 → 机制层 → 数据层 → 执行层
-   - 每层职责清晰，可独立扩展
-
-2. **🧩 泛型 + 非泛型双轨系统**
-   - 泛型基类保证类型安全
-   - 非泛型基类支持 Unity `[SerializeReference]` 多态序列化
-
-3. **🛠️ 强大的编辑器工具**
-   - 自定义 SkillDataSO 编辑器窗口（独立窗口 + Inspector 双模式）
-   - 机制/条件多态选择抽屉 (PropertyDrawer)
-   - TriggerEvent 枚举可视化编辑器
-   - 公式编辑器（支持语法高亮、字段引用插入、公式检查）
-
-4. **🤖 自动化代码生成**
-   - 根据 `IUnit<T>` 实现自动生成 `SkillDataSO<T>` 子类
-   - 自动生成封闭泛型机制类和条件类
-   - 自动扫描并更新 `TriggerEventType` 枚举
-
-5. **📊 数据层与公式系统**
-   - 支持静态值、引用值、表达式、自定义公式四种类型
-   - 自定义公式支持 `caster.Attack * 1.5 + target.MaxHealth * 0.1` 语法
-   - 运行时公式求值器，支持括号、运算符优先级
-
-6. **⚡ 性能优化机制**
-   - `ConditionPool<T>` 条件对象池
-   - `UnitEvent<T>` 缓存监听器数组，避免委托链 GC
-   - `CachedCondition<T>` 条件结果缓存
-
-7. **🔒 必要数据自动同步 (RequiredData)**
-   - `[RequiredData]` 特性声明机制/条件所需的数据项
-   - 编辑器自动创建/清理必要数据条目
-   - 锁定必要数据防止误删（显示🔒图标）
-   - 类型冲突检测与报错
-   - 支持声明公式类型数据
-   - 支持限制可切换的类型白名单 (AllowedTypes)
-   - 显示数据项的依赖来源（来源机制/条件名称）
-
-8. **🎨 创建技能脚本窗口**
-   - 可视化选择目标 Unit 类型
-   - 支持搜索过滤
-   - 自动生成机制/条件模板代码
-
-9. **✨ 内置 Buff 子系统（GBF）**
-   - `BuffSystem<T>` 管理单位身上所有增益/减益
-   - 支持 `BuffDataSO` 数据驱动配置与 `SimpleBuff<T>` 运行时快速施加
-   - 效果执行器 + 执行模式（一次性 / 周期性）
-   - 属性修改、Action 事件分发、标签查询与驱散
-   - 与技能机制（`ApplyBuffMechanism` / `RemoveBuffMechanism`）和条件（`HasBuffCondition`）深度集成
-   - 独立 Buff 编辑器与效果代码生成器
-
----
-
-## 3. 架构设计
-
-### 3.1 六层架构总览
+一个 `ISkill<T>` 实例 = **六层组合** + **Profile 配置** + **可选 Timeline**。
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  ISkill<T>                       │
-│  ┌───────────────────────────────────────────┐  │
-│  │         IBaseLayer<T> (基础层)             │  │
-│  │  负责：触发事件注册、技能激活入口           │  │
-│  │  实现：ActiveBaseLayer / PassiveBaseLayer  │  │
-│  └───────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────┐  │
-│  │       IInformationLayer<T> (信息层)        │  │
-│  │  负责：技能名称、描述等元数据               │  │
-│  └───────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────┐  │
-│  │       IConditionLayer<T> (条件层)          │  │
-│  │  负责：前置条件检查                         │  │
-│  │  支持：AND/OR/NOT 组合条件                  │  │
-│  └───────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────┐  │
-│  │       IMechanismLayer<T> (机制层)          │  │
-│  │  负责：技能具体效果执行                     │  │
-│  │  支持：函数式机制 + 对象式机制              │  │
-│  └───────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────┐  │
-│  │         IDataLayer<T> (数据层)             │  │
-│  │  负责：动态数据存储与公式求值               │  │
-│  └───────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────┐  │
-│  │        IExecuteLayer<T> (执行层)           │  │
-│  │  负责：协调条件检查和机制执行               │  │
-│  └───────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────┘
+事件触发 → BaseLayer → ExecuteLayer → Pipeline
+                              ├─ 中间件拦截
+                              ├─ ConditionLayer 检查
+                              ├─ MechanismLayer 执行效果
+                              └─ Timeline 延迟触发
 ```
 
-### 3.2 数据流图
+### 策划配什么？
 
-```
-Unit 触发事件
-    │
-    ▼
-UnitEvent<T>.Trigger(eventName, context)
-    │
-    ▼
-BaseLayer<T>.Trigger(context)
-    │
-    ▼
-ExecuteLayer<T>.Execute(context)
-    │
-    ├──► ConditionLayer<T>.CheckCondition(context)
-    │       │
-    │       ├──► Condition<T>[0].IsEligible()
-    │       ├──► Condition<T>[1].IsEligible()
-    │       └──► ...
-    │
-    └──► [条件通过] MechanismLayer<T>.Mechanism(context)
-            │
-            ├──► FuncMechanism(context)  // 函数式机制
-            └──► Mechanism<T>.Execute()   // 对象式机制
-                    │
-                    └──► DataLayer<T>.GetValue<T>()  // 公式求值
-```
+| 资产 | 用途 |
+|------|------|
+| `SkillDataSO` | 技能：触发事件、条件树、机制树、数值、Timeline |
+| `BuffDataSO` | Buff：时长、叠层、修改器、效果执行器 |
+| `CompositeConditionSO` | 可复用条件组合 |
+| `CompositeMechanismSO` | 可复用机制组合 |
 
-### 3.3 类层次结构
+### 程序写什么？
 
-```
-ConditionBase (非泛型, [Serializable])
-    └── Condition<T> (泛型抽象类)
-            ├── AndCondition<T>      // 逻辑与
-            ├── OrCondition<T>       // 逻辑或
-            ├── NotCondition<T>      // 逻辑非
-            ├── CachedCondition<T>   // 缓存装饰器
-            ├── FuncCondition<T>     // 函数式条件
-            └── CooldownCondition<T> // 冷却条件
+| 代码 | 用途 |
+|------|------|
+| `UnitBase<T>` 子类 | 游戏角色，暴露 `[SkillDataField]` 数值 |
+| `Mechanism<T>` 子类 | 技能效果（伤害、治疗、施加 Buff…） |
+| `Condition<T>` 子类 | 释放条件（冷却、标签、Buff 层数…） |
 
-MechanismBase (非泛型, [Serializable])
-    └── Mechanism<T> (泛型抽象类)
-            └── 用户自定义机制...
+### 最小运行代码
 
-SkillDataSO (非泛型基类)
-    └── SkillDataSO<T> (泛型基类)
-            └── 自动生成的 CharacterSkillDataSO 等
+```csharp
+// 1. 定义 Unit
+public class Hero : UnitBase<Hero>
+{
+    [SkillDataField(DisplayName = "攻击力")] public float Attack = 10f;
+    public override string[] GetSupportedEvents() => new[] { "OnAttack" };
+}
 
-ISkill<T>
-    └── Skill<T> (具体实现)
+// 2. 生成代码：菜单 Generate ALL Classes
+
+// 3. 创建 SkillDataSO 资产并配置
+
+// 4. 运行时挂载
+var so = Resources.Load<SkillDataSO<Hero>>("Skills/Slash");
+hero.AddSkill(SkillFactory<Hero>.CreateSkill(so));
+
+// 5. 触发
+hero.TriggerEvent("OnAttack", enemy);
 ```
 
 ---
 
-## 4. 快速开始
+## 2. 安装与 Samples
 
-### 4.1 安装
+### 安装方式
 
-1. 将整个 `TechCosmos.SkillSystem` 文件夹复制到你的 Unity 项目的 `Assets` 目录下
-2. 确保项目使用 `.NET Standard 2.1` 或更高版本
-3. 等待 Unity 编译完成
+**方式 A — UPM 本地包**
 
-### 4.2 第一步：创建你的第一个 Unit
+将本仓库放到项目的 `Packages/` 或 `Assets/` 下，在 `manifest.json` 中添加：
+
+```json
+"com.techcosmos.skillsystem": "file:../Tech-Cosmos.Framework.SkillSystem"
+```
+
+**方式 B — 直接复制**
+
+将整个 `Tech-Cosmos.Framework.SkillSystem` 文件夹复制到 `Assets/` 下。
+
+### 导入 Demo Sample
+
+1. 打开 **Package Manager** → 找到 **SkillSystem**
+2. 展开 **Samples** → 导入 **Skill System Demo**
+3. 菜单 **`Tech-Cosmos → SkillSystem → Samples → Create Demo Scene`**
+4. 运行场景：**Space** 攻击，**H** 治疗
+
+Demo 核心类型：
+
+| 类型 | 说明 |
+|------|------|
+| `DemoCharacter` | 继承 `UnitBase`，带 Attack / Health |
+| `DemoDamageMechanism` | 示例伤害机制 |
+| `DemoHealMechanism` | 示例治疗机制 |
+| `DemoSceneController` | 键盘输入与技能绑定 |
+
+---
+
+## 3. 快速上手（完整流程）
+
+### Step 1 — 创建 Unit
+
+**推荐**：继承 `UnitBase<T>`，自动获得事件总线、技能容器、Buff、施法控制器。
 
 ```csharp
 using UnityEngine;
 using TechCosmos.SkillSystem.Runtime;
 
-// 1. 标记这个类需要生成 SkillDataSO
-[GenerateSkillDataSO(MenuName = "Tech-Cosmos/Skill/Character")]
-public class Character : MonoBehaviour, IUnit<Character>
+[GenerateSkillDataSO(MenuName = "Tech-Cosmos/Skill/Hero")]
+public class Hero : UnitBase<Hero>
 {
-    // 2. 标记需要暴露到数据层的字段
-    [SkillDataField(Category = "战斗属性", DisplayName = "攻击力")]
-    public float Attack = 10f;
+    [SkillDataField(Category = "战斗", DisplayName = "攻击力")]
+    public float Attack = 15f;
 
-    [SkillDataField(Category = "战斗属性", DisplayName = "防御力")]
-    public float Defense = 5f;
+    [SkillDataField(Category = "战斗", DisplayName = "当前生命")]
+    public float Health = 100f;
 
-    [SkillDataField(Category = "生命属性", DisplayName = "最大生命值")]
-    public float MaxHealth = 100f;
+    public override string[] GetSupportedEvents()
+        => new[] { "OnAttack", "OnDamaged", "OnDeath" };
 
-    private float _health;
-    public float Health
+    public void TakeDamage(float amount)
     {
-        get => _health;
-        set => _health = Mathf.Clamp(value, 0, MaxHealth);
-    }
-
-    // 3. 声明支持的事件
-    public string[] GetSupportedEvents() => new[] { "OnAttack", "OnDamaged", "OnHeal" };
-
-    // 4. 事件触发逻辑
-    public void TriggerEvent(string eventName, SkillContext<Character> context)
-    {
-        // 事件系统会自动分发给订阅的技能
-    }
-
-    public void AddSkill(ISkill<Character> skill) { /* 添加到 UnitEvent */ }
-    public void RemoveSkill(ISkill<Character> skill) { /* 移除 */ }
-
-    private void Awake()
-    {
-        Health = MaxHealth;
+        Health = Mathf.Max(0f, Health - amount);
+        if (Health <= 0f) TriggerEvent("OnDeath");
     }
 }
 ```
 
-### 4.3 第二步：生成代码
+> 若需完全自定义，也可直接实现 `IUnit<T>` + `ISkillExecutionOwner<T>` + `IBuffHost<T>`，但工作量更大。
+
+### Step 2 — 生成封闭泛型代码
 
 ```
-菜单栏 → Tech-Cosmos → SkillSystem → Generator → Generate ALL Classes
+Tech-Cosmos → SkillSystem → Generator → Generate ALL Classes
 ```
 
-这会自动生成：
-- `Assets/Generated/Mechanisms/` - 机制封闭泛型类
-- `Assets/Generated/Conditions/` - 条件封闭泛型类
-- `Assets/Generated/SkillDataSO/` - 技能数据配置类
+生成输出（默认路径）：
 
-### 4.4 第三步：创建自定义机制
+```
+Assets/Generated/
+├── Mechanisms/     ← Mechanism<T> 的封闭子类 *.g.cs
+├── Conditions/     ← Condition<T> 的封闭子类 *.g.cs
+└── SkillDataSO/    ← HeroSkillDataSO 等
+```
+
+> **每次新增/修改带 `[AutoGenerateMechanism]` / `[AutoGenerateCondition]` 的类后都要重新生成。**
+
+### Step 3 — 编写机制
 
 ```csharp
-using UnityEngine;
-using TechCosmos.SkillSystem.Runtime;
-
 [Serializable]
-// 声明该机制所需的数据项（编辑器会自动创建/同步）
 [RequiredData("DamageMultiplier", typeof(float), DefaultValue = "1.5", Description = "伤害倍率")]
-// 也可声明公式类型的数据项
 [RequiredData("DamageFormula", typeof(float), IsFormula = true,
     FormulaType = FormulaValue.FormulaType.Custom,
     CustomFormula = "caster.Attack * 1.5",
-    Description = "伤害计算公式")]
-// 限制只允许切换为 float 或 FormulaValue 类型
-[RequiredData("CriticalChance", typeof(float), DefaultValue = "0.1",
-    Description = "暴击率",
-    AllowedTypes = new[] { typeof(float), typeof(FormulaValue) })]
-// 标记自动生成封闭泛型类
-[AutoGenerateMechanism(typeof(Character))]
-// 可选：编辑器菜单分类
-[MechanismMenu("⚔ 伤害", DisplayName = "伤害机制", Priority = 1)]
+    Description = "伤害公式")]
+[AutoGenerateMechanism(typeof(Hero))]
+[MechanismMenu("⚔ 伤害", DisplayName = "造成伤害", Priority = 1)]
 public class DamageMechanism<T> : Mechanism<T> where T : class, IUnit<T>
 {
-    [SerializeField] private float baseDamage = 10f;
-    [SerializeField] private float defensePenetration = 0f;
-
     public override void Execute(SkillContext<T> context, IDataLayer<T> dataLayer)
     {
-        // 从数据层获取动态值
-        float casterAttack = dataLayer.GetValue<float>("Attack", context);
-        float targetDefense = dataLayer.GetValue<float>("Defense", context);
-        float damageMultiplier = dataLayer.GetValue<float>("DamageMultiplier", context);
-        float criticalChance = dataLayer.GetValue<float>("CriticalChance", context);
-
-        // 计算伤害
-        float damage = (baseDamage + casterAttack * damageMultiplier)
-                        - Mathf.Max(0, targetDefense - defensePenetration);
-
-        // 暴击判定
-        if (Random.value < criticalChance)
-        {
-            damage *= 2f;
-            Debug.Log("[DamageMechanism] 暴击！");
-        }
-
-        damage = Mathf.Max(0, damage);
-        Debug.Log($"[DamageMechanism] 造成 {damage} 点伤害");
+        float multiplier = dataLayer.GetValue<float>("DamageMultiplier", context);
+        float formulaDamage = dataLayer.GetValue<float>("DamageFormula", context);
+        float finalDamage = formulaDamage * multiplier;
+        Debug.Log($"[Damage] {context.caster} → {context.target} : {finalDamage}");
     }
 }
 ```
 
-### 4.5 第四步：配置技能
+再次运行 **Generate ALL Classes**。
 
-1. 在 Project 窗口右键 → `Create → Tech-Cosmos → Skill → Character`
-2. 选择生成的 `NewCharacterSkill` 资产
-3. 使用 **技能编辑器** (`Tech-Cosmos → SkillSystem → Skill Editor Window`) 配置：
-   - 基础信息：技能名称、触发事件
-   - 条件列表：冷却条件、生命值条件等
-   - 机制列表：选择刚创建的伤害机制
-   - 数据层：必要数据会自动出现（如 DamageMultiplier、DamageFormula、CriticalChance）
+### Step 4 — 创建并配置 SkillDataSO
 
-### 4.6 第五步：运行时创建技能
+1. Project 右键 → **Create → Tech-Cosmos → Skill → Hero**
+2. 打开 **`Tech-Cosmos → SkillSystem → Skill Editor Window`**
+3. 配置各面板：
+
+| 面板 | 配置项 |
+|------|--------|
+| **基础** | 名称、描述、主动/被动、`TriggerEvents` |
+| **Profile** | 优先级、读条、引导、可打断、标签 |
+| **条件树** | 添加 Leaf → 选择 `CooldownCondition` 等 |
+| **机制** | 平铺列表 或 启用机制树 |
+| **Timeline** | 可选：分段触发机制/事件 |
+| **数据层** | `[RequiredData]` 自动同步的键值 |
+
+4. 保存资产
+
+### Step 5 — 运行时挂载与触发
 
 ```csharp
-// 方式一：从 SkillDataSO 创建
-SkillDataSO<Character> characterSkillSO = Resources.Load<SkillDataSO<Character>>("Skills/CharacterSkill");
-ISkill<Character> skill = SkillFactory<Character>.CreateSkill(characterSkillSO);
-
-// 方式二：代码构建
-var skillData = new SkillData<Character>
+public class GameBootstrap : MonoBehaviour
 {
-    SkillType = SkillType.Active,
-    TriggerEvent = "OnAttack",
-    SkillName = "重击",
-    SkillDescription = "造成 150% 攻击力的伤害"
-};
+    public Hero hero;
+    public Hero enemy;
+    public SkillDataSO heroSlashSO;
 
-// 添加条件（使用 ConditionPool 对象池）
-var healthCheck = new FuncCondition<Character>(ctx => ctx.caster.Health > 0);
-var cooldownCheck = new CooldownCondition<Character>(3f);
+    void Start()
+    {
+        if (heroSlashSO is SkillDataSO<Hero> typedSO)
+            hero.AddSkill(SkillFactory<Hero>.CreateSkill(typedSO));
+    }
 
-// 使用运算符组合条件（自动从对象池租用）
-skillData.AddCondition(healthCheck & cooldownCheck);
-
-// 创建技能
-ISkill<Character> codeSkill = SkillFactory<Character>.CreateSkill(skillData);
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Space))
+            hero.TriggerEvent("OnAttack", enemy);
+    }
+}
 ```
+
+**被动技能**：`SkillType = Passive` 时，`AddSkill` 会立即执行一次。
 
 ---
 
-## 5. 核心概念
+## 4. 架构设计
 
-### 5.1 IUnit<T> 接口
+### 4.1 六层 + 管线总览
 
-所有参与技能系统的实体必须实现此接口：
+```mermaid
+flowchart TB
+    subgraph Unit["单位 (UnitBase)"]
+        UE[UnitEvent 事件总线]
+        SH[SkillHolder 技能容器]
+        EC[ExecutionController 施法控制]
+    end
+
+    subgraph Skill["ISkill&lt;T&gt;"]
+        BL[BaseLayer 触发入口]
+        IL[InformationLayer 名称描述]
+        CL[ConditionLayer 条件]
+        ML[MechanismLayer 机制]
+        DL[DataLayer 数据/公式]
+        EL[ExecuteLayer 执行入口]
+    end
+
+    UE -->|Trigger| BL
+    BL -->|TryExecute 或 Execute| EC
+    BL --> EL
+    EL --> PL[SkillExecutionPipeline]
+    PL --> MW[Middleware 中间件]
+    PL --> CL
+    PL --> ML
+    PL --> TL[Timeline 时间轴]
+    ML --> DL
+```
+
+### 4.2 一次技能执行的完整时序
+
+```
+1. 外部调用 unit.TriggerEvent("OnAttack", context)
+2. UnitEvent 按优先级调用各技能 BaseLayer.Trigger
+3. ActiveBaseLayer：
+   - 若 caster 有 ExecutionController → TryExecute（可能进入读条/引导）
+   - 否则 → ExecuteLayer.Execute
+4. SkillExecutionPipeline.Execute：
+   a. 分配 executionId，WithSkill 绑定当前技能
+   b. 全局 + 局部 Middleware.OnBeforeExecute（可 cancel）
+   c. 触发 Executing 事件（实例 + 全局）
+   d. ConditionLayer.CheckCondition
+      - 失败 → OnConditionFailed 回调 + Failed 事件 → 返回 ConditionFailed
+   e. MechanismLayer.Mechanism（ContinueOnError / FailFast）
+   f. 条件 OnSkillExecuted 回调（如 Cooldown 开始计时）
+   g. Middleware.OnAfterExecute
+   h. Executed 事件
+   i. 若 Timeline.enabled → SkillTimelineService.Play
+5. Timeline Tick 到各 clip 时间点 → 执行机制或 TriggerEvent
+```
+
+### 4.3 泛型 / 非泛型双轨
+
+| 层级 | 泛型（运行时类型安全） | 非泛型（Unity 序列化） |
+|------|------------------------|------------------------|
+| 条件 | `Condition<T>` | `ConditionBase` + `[SerializeReference]` |
+| 机制 | `Mechanism<T>` | `MechanismBase` + `[SerializeReference]` |
+| 配置 | `SkillDataSO<T>` | `SkillDataSO` |
+
+编辑器里配置的是非泛型基类；`GetSkillData()` / `SkillFactory` 编译为泛型运行时实例。
+
+---
+
+## 5. 运行时系统详解
+
+### 5.1 六层架构
+
+| 层 | 接口 | 职责 |
+|----|------|------|
+| 基础层 | `IBaseLayer<T>` | 订阅 `TriggerEvents`，作为技能入口 |
+| 信息层 | `IInformationLayer<T>` | 名称、描述 |
+| 条件层 | `IConditionLayer<T>` | 前置条件检查 |
+| 机制层 | `IMechanismLayer<T>` | 执行游戏效果 |
+| 数据层 | `IDataLayer<T>` | 键值存储、公式/随机求值 |
+| 执行层 | `IExecuteLayer<T>` | 转发至 Pipeline，广播生命周期事件 |
+
+**主动 vs 被动**
+
+| 类型 | BaseLayer 实现 | 行为 |
+|------|----------------|------|
+| `SkillType.Active` | `ActiveBaseLayer` | 等事件触发后执行 |
+| `SkillType.Passive` | `PassiveBaseLayer` | `AddSkill` 时立即执行一次，之后随事件触发 |
+
+### 5.2 执行管线 SkillExecutionPipeline
 
 ```csharp
-public interface IUnit<T> where T : class, IUnit<T>
+var result = SkillExecutionPipeline.Execute(
+    skill,
+    context,
+    middleware: myMiddlewareList,           // 可选：本次执行的局部中间件
+    mechanismPolicy: MechanismErrorPolicy.ContinueOnError);
+
+// result 枚举：
+// Success | ConditionFailed | Cancelled | Casting | Channeling | Blocked | Error
+```
+
+**Profiler 标记**：`SkillProfilerMarkers.Execute / Condition / Mechanism / Formula`
+
+**Trace 记录**：`SkillExecutionTrace.Record(skill, context, result)` 用于调试统计。
+
+### 5.3 施法控制器 SkillExecutionController
+
+配置在 `SkillProfile` 上：
+
+```csharp
+public class SkillProfile
 {
-    // 返回该 Unit 支持的事件列表
-    string[] GetSupportedEvents();
-
-    // 触发指定事件
-    void TriggerEvent(string eventName, SkillContext<T> context);
-
-    // 管理技能
-    void AddSkill(ISkill<T> skill);
-    void RemoveSkill(ISkill<T> skill);
+    public int executionPriority;   // 越大越优先；高优先级可打断低优先级
+    public float castTime;          // 读条时间（秒）
+    public float channelTime;      // 引导时间（秒）
+    public bool canBeInterrupted;  // 是否可被伤害/沉默等打断
+    public List<string> tags;      // 技能标签
 }
 ```
 
-### 5.2 SkillContext<T>
+**流程**：
 
-技能执行的上下文，包含施法者和目标信息：
+```
+castTime > 0 或 channelTime > 0
+    → BeginCast → Phase = Casting
+    → castTime 结束 → Phase = Channeling（若有）或直接 CompleteCast
+    → channelTime 结束 → CompleteCast → Pipeline.Execute
+
+castTime == 0 && channelTime == 0
+    → 直接 Pipeline.Execute
+```
+
+**打断**：
 
 ```csharp
-public struct SkillContext<T> where T : class, IUnit<T>
-{
-    public T caster;        // 施法者
-    public T target;        // 目标
-    public Vector3 targetPos; // 目标位置
+hero.ExecutionController.TryInterrupt(InterruptReason.Damage);
+hero.ExecutionController.Cancel(); // Manual
+```
 
-    // 支持隐式转换为非泛型上下文
-    public static implicit operator SkillContextBase(SkillContext<T> ctx) => ...;
+**前提**：施法者需实现 `ISkillExecutionOwner<T>`（`UnitBase` 已实现）。  
+`ActiveBaseLayer` 会自动检测并走 `TryExecute`。
+
+### 5.4 条件系统与条件树
+
+#### 代码组合（运行时）
+
+```csharp
+var cond = healthCheck & manaCheck | !stunCheck;
+// & → AndCondition   | → OrCondition   ! → NotCondition
+// 建议使用 ConditionPool<T> 减少 GC
+```
+
+#### 内置条件
+
+| 条件 | 说明 |
+|------|------|
+| `CooldownCondition<T>` | 冷却；成功执行后 `OnSkillExecuted` 开始计时 |
+| `HasBuffCondition<T>` | 检查 Buff 存在与层数 |
+| `HasTagCondition<T>` | 检查 `TagContainer` 标签 |
+| `FuncCondition<T>` | Lambda 包装 |
+| `CachedCondition<T>` | 结果缓存装饰器 |
+| `And/Or/NotCondition<T>` | 逻辑组合 |
+
+#### 条件树（编辑器 / SO 配置）
+
+节点类型：
+
+| 节点 | 说明 |
+|------|------|
+| `ConditionTreeLeaf` | 单个条件实例 |
+| `ConditionTreeAnd` | 全部满足 |
+| `ConditionTreeOr` | 任一满足 |
+| `ConditionTreeNot` | 取反 |
+| `ConditionTreeRef` | 引用 `CompositeConditionSO` |
+
+编译：`ConditionTreeCompiler.Compile<T>(root)` → 单个 `Condition<T>`（通常是 And/Or 嵌套）。
+
+`SkillDataSO` 字段：
+
+```csharp
+public bool useConditionTree = true;          // 默认启用条件树
+public ConditionTreeNodeBase conditionTreeRoot;
+public List<ConditionBase> Conditions;        // 旧版平铺列表（useConditionTree=false）
+```
+
+#### 复合条件资产
+
+```
+Create → Tech-Cosmos → SkillSystem → Composite Condition
+```
+
+可在多个技能的条件树中通过 **Ref 节点** 引用，避免重复配置。
+
+### 5.5 机制系统与机制树
+
+#### 机制类型
+
+| 类型 | 说明 |
+|------|------|
+| 序列化机制 | `Mechanism<T>` 子类，Inspector 可配字段 |
+| 委托机制 | `Action<SkillContext<T>>`，仅代码构建 |
+| 组合机制 | `SequenceMechanism` / `ParallelMechanism`（编译产物） |
+
+#### 内置机制
+
+| 机制 | 说明 |
+|------|------|
+| `ApplyBuffMechanism<T>` | 施加 `BuffDataSO` 或 `SimpleBuff` |
+| `RemoveBuffMechanism<T>` | 按名称/标签移除 Buff |
+
+#### 机制树
+
+| 节点 | 运行时语义 |
+|------|------------|
+| `MechanismTreeLeaf` | 执行单个机制 |
+| `MechanismTreeSequence` | 顺序执行子节点 |
+| `MechanismTreeParallel` | 同批次执行（单线程依次调用） |
+| `MechanismTreeRef` | 引用 `CompositeMechanismSO` |
+
+`SkillDataSO` 字段：
+
+```csharp
+public bool useMechanismTree;                   // 默认 false，使用平铺列表
+public MechanismTreeNodeBase mechanismTreeRoot;
+public List<MechanismBase> Mechanisms;          // 旧版平铺
+```
+
+#### SkillBack 回滚
+
+```csharp
+public override void SkillBack(ISkill<T> skill)
+{
+    // 技能 RemoveSkill / OnRemove 时调用，用于清理 Buff、还原状态
 }
 ```
 
-### 5.3 技能类型
+`MechanismLayer.InvokeSkillBack` 在 `Skill.OnRemove()` 时逆序触发。
+
+#### 错误策略
 
 ```csharp
-public enum SkillType
-{
-    Active,   // 主动技能（由事件触发）
-    Passive   // 被动技能（常驻效果）
-}
+mechanismLayer.ErrorPolicy = MechanismErrorPolicy.FailFast; // 默认 ContinueOnError
 ```
 
-### 5.4 条件系统
+### 5.6 数据层与公式
 
-条件系统支持逻辑组合，使用运算符重载：
+#### 支持的值类型
+
+| 类型 | 说明 |
+|------|------|
+| `float / int / string / bool` | 静态值 |
+| `FormulaValue` | 静态 / 引用 / 表达式 / 自定义公式 |
+| `RandomValue` | 随机范围 |
+| 自定义 `[DataEntryType]` 类型 | 通过 `SerializableValue` 包装 |
+
+#### 读取数据
 
 ```csharp
-// AND 条件：所有条件都满足
-var andCondition = conditionA & conditionB;
-
-// OR 条件：任一条件满足
-var orCondition = conditionA | conditionB;
-
-// NOT 条件：取反
-var notCondition = !conditionA;
-
-// 复杂组合
-var complex = (conditionA & conditionB) | !conditionC;
+float dmg = dataLayer.GetValue<float>("DamageFormula", context);
 ```
 
-内置条件类型：
+`DataLayer` 会自动：
+- 对 `FormulaValue` 调用 `FormulaEvaluator`
+- 对 `RandomValue` 调用 `Resolve()`
+- 对 `Func<SkillContext<T>, T>` 委托求值
 
-| 条件类 | 说明 |
-|--------|------|
-| `AndCondition<T>` | 逻辑与，所有子条件满足才通过 |
-| `OrCondition<T>` | 逻辑或，任一子条件满足即通过 |
-| `NotCondition<T>` | 逻辑非，对子条件取反 |
-| `CachedCondition<T>` | 缓存装饰器，避免重复计算 |
-| `FuncCondition<T>` | 函数式条件，直接传入 Lambda |
-| `CooldownCondition<T>` | 冷却时间条件 |
-
-### 5.5 数据层与公式系统
-
-数据层支持四种公式类型：
-
-```csharp
-public enum FormulaType
-{
-    Static,      // 静态值: 直接返回 .staticValue
-    Reference,   // 引用值: 从上下文路径取值 + 操作符运算
-    Expression,  // 表达式: 类似 Reference
-    Custom       // 自定义: 支持完整公式语法
-}
-```
-
-自定义公式语法示例：
+#### 公式语法
 
 ```
 caster.Attack * 1.5 + target.MaxHealth * 0.1
 (caster.Attack - target.Defense) * 2.0
-caster.Level * 10 + 100
+random(0, 100) * 0.01
 ```
 
-### 5.6 必要数据系统 [RequiredData]
+支持：`+ - * /`、括号、`caster.xxx` / `target.xxx` 属性路径、`random(min,max)`。
 
-通过 `[RequiredData]` 特性，机制或条件可以声明其依赖的数据项。编辑器会自动：
+#### RequiredData 自动同步
 
-- 在数据层创建缺失的必要数据条目
-- 删除不再需要的旧数据条目
-- 锁定必要数据条目防止误删（显示🔒图标）
-- 检测并报告类型冲突
-- 显示数据项的依赖来源（来源机制/条件名称）
-- 支持限制可切换的类型白名单
+在机制/条件类上声明：
 
 ```csharp
-// 基础声明
-[RequiredData("DamageMultiplier", typeof(float), DefaultValue = "1.5", Description = "伤害倍率")]
-
-// 公式类型声明
+[RequiredData("BuffId", typeof(string), DefaultValue = "Haste", Description = "Buff 标识")]
 [RequiredData("DamageFormula", typeof(float), IsFormula = true,
     FormulaType = FormulaValue.FormulaType.Custom,
-    CustomFormula = "caster.Attack * 1.5",
-    Description = "伤害计算公式")]
-
-// 限制类型白名单
-[RequiredData("CriticalChance", typeof(float), DefaultValue = "0.1",
-    Description = "暴击率",
+    CustomFormula = "caster.Attack * 2",
     AllowedTypes = new[] { typeof(float), typeof(FormulaValue) })]
 ```
 
-### 5.7 事件系统
+编辑器会：自动创建条目、锁定防删（🔒）、检测类型冲突、显示依赖来源。
 
-`UnitEvent<T>` 提供高性能的事件订阅/发布：
+### 5.7 技能时间轴 Timeline
 
-```csharp
-// 创建事件系统
-var unitEvent = new UnitEvent<Character>("OnAttack", "OnDamaged", "OnHeal");
-
-// 订阅事件
-unitEvent.Subscribe("OnAttack", context =>
-{
-    Debug.Log($"{context.caster} 攻击了 {context.target}");
-});
-
-// 触发事件
-unitEvent.Trigger("OnAttack", new SkillContext<Character>(attacker, defender));
-
-// 查询订阅者数量
-int count = unitEvent.GetSubscriberCount("OnAttack");
-```
-
-### 5.8 Buff 系统
-
-Buff 子系统已合并进 SkillSystem，推荐通过 `UnitBase<T>` 使用（已内置 `BuffSystem<T>` 与标签同步）。
-
-#### 架构
-
-```
-BuffSystem<T> (管理层)
-    ↓ 管理
-IBuff<T> (接口层)
-    ↓ 实现
-BaseBuff<T> / ConfigurableBuff<T> / SimpleBuff<T>
-    ↓ 包含
-BuffEffectExecuter (执行层)
-    ├── BuffEffect (效果)
-    └── ExecutionMode (一次性 / 周期性)
-```
-
-#### 核心类型
-
-| 类型 | 说明 |
-|------|------|
-| `BuffSystem<T>` | 管理单位身上所有 Buff，提供叠层、驱散、属性修正、Action 分发 |
-| `BuffDataSO` | ScriptableObject 配置：时长、标签、叠层策略、修改器、效果执行器 |
-| `ConfigurableBuff<T>` | 从 `BuffDataSO` 构建的运行时 Buff |
-| `SimpleBuff<T>` | 技能机制使用的轻量运行时 Buff（按 id / 时长 / 修改器施加） |
-| `IBuffHost<T>` | Buff 宿主接口，提供 `BuffSystem<T>` 与 `TagContainer` |
-| `ApplyBuffMechanism<T>` | 技能机制：施加 Buff（支持 `BuffDataSO` 或运行时参数） |
-| `RemoveBuffMechanism<T>` | 技能机制：按名称或标签移除 Buff |
-| `HasBuffCondition<T>` | 条件：检查是否拥有指定 Buff 且层数达标 |
-
-#### 快速使用
+配置在 `SkillDataSO.Timeline`：
 
 ```csharp
-// 推荐：继承 UnitBase，已内置 BuffSystem
-public class Hero : UnitBase<Hero>
+public class SkillTimelineData
 {
-    protected override string[] GetSupportedEvents() => new[] { "OnAttack" };
+    public bool enabled;
+    public float totalDuration;
+    public List<SkillTimelineClip> clips;
 }
 
-// 代码施加 Buff（数据驱动）
-var buffData = Resources.Load<BuffDataSO>("Buffs/Haste");
-hero.BuffSystem.AddBuff(new ConfigurableBuff<Hero>(hero, buffData, caster));
+public class SkillTimelineClip
+{
+    public SkillTimelineClipType clipType;  // Mechanism | EventMarker | PhaseLabel
+    public float startTime;
+    public float duration;
+    public string eventName;              // EventMarker 用
+    public MechanismBase mechanism;       // Mechanism 用
+}
+```
+
+**触发时机**：Pipeline 执行 **成功后** 由 `SkillTimelineService.Play` 启动；`UnitBase.Update` 中自动 `SkillTimelineService.Tick`。
+
+**EventMarker** 示例：在 0.5s 时触发 `"OnTimelineHit"`，可让另一个被动技能响应。
+
+### 5.8 UnitBase 与事件系统
+
+`UnitBase<T>` 集成：
+
+| 组件 | 说明 |
+|------|------|
+| `UnitEvent<T>` | 事件订阅/发布，支持优先级 |
+| `SkillHolder<T>` | 技能注册、被动激活、Remove 清理 |
+| `BuffSystem<T>` | Buff 管理 |
+| `TagContainer` | 状态标签，Buff 增删时自动同步 |
+| `SkillExecutionController<T>` | 读条/引导/打断 |
+
+```csharp
+// 订阅
+unitEvent.Subscribe("OnAttack", ctx => { }, priority: 10);
+
+// 触发（UnitBase 封装）
+hero.TriggerEvent("OnAttack", enemy);
+hero.TriggerEvent("OnAttack", new SkillContext<Hero>(hero, enemy));
+
+// 技能管理
+hero.AddSkill(skill);
+hero.TryGetSkill("重击", out var slash);
+hero.RemoveSkill(skill);
+```
+
+**性能**：`UnitEvent` 缓存 listener 数组；递归触发深度 > 8 时中止并警告。
+
+### 5.9 Buff 子系统
+
+目录：`Runtime/Buff/GBF/`（核心引擎）+ 集成层。
+
+#### 推荐用法
+
+```csharp
+public class Hero : UnitBase<Hero> { }  // 已内置 BuffSystem
+
+// 数据驱动
+var data = Resources.Load<BuffDataSO>("Buffs/Haste");
+hero.BuffSystem.AddBuff(new ConfigurableBuff<Hero>(hero, data, caster));
+
+// 代码轻量 Buff
+hero.BuffSystem.AddBuff(new SimpleBuff<Hero>(
+    hero, "Haste", duration: 5f, tags: new[] { "Buff" },
+    modifiers: new[] { new StatModifier("Attack", ModifierOp.Add, 10f) },
+    caster: hero, stackPolicy: BuffStackPolicy.StackAndRefresh, maxStacks: 3));
 
 // 属性修正
-float attack = hero.EvaluateStat("Attack", baseAttack);
+float atk = hero.EvaluateStat("Attack", baseAttack);
 
-// 向 Buff 分发 Action（如受伤、治疗）
-hero.BuffSystem.DispatchAction("OnDamaged", attacker, hero, damage, "Physical");
-
-// 驱散带标签的 Buff
+// 驱散
 hero.BuffSystem.DispelByTags("Debuff", "Poison");
 ```
 
-#### 叠层策略
+#### 与技能集成
 
-| `ModifierStackPolicy`（技能机制） | 对应 `BuffStackPolicy` |
-|----------------------------------|------------------------|
-| `Stack` | `StackAndRefresh` |
-| `RefreshDuration` | `ExtendDuration` |
-| `Replace` | `Replace` |
-| `Ignore` | 已存在则跳过施加 |
+| 组件 | 用途 |
+|------|------|
+| `ApplyBuffMechanism` | 技能中施加 Buff |
+| `RemoveBuffMechanism` | 技能中移除 Buff |
+| `HasBuffCondition` | 条件：拥有指定 Buff |
+| `HasTagCondition` | 条件：拥有指定标签 |
+
+#### 叠层策略映射
+
+| `ModifierStackPolicy`（机制） | `BuffStackPolicy`（GBF） |
+|-------------------------------|--------------------------|
+| Stack | StackAndRefresh |
+| RefreshDuration | ExtendDuration |
+| Replace | Replace |
+| Ignore | 已存在则跳过 |
+
+### 5.10 中间件 ISkillMiddleware
+
+```csharp
+public class LoggingMiddleware : SkillMiddlewareBase
+{
+    public override int Order => 100;
+
+    public override bool OnBeforeExecute<T>(ISkill<T> skill, ref SkillContext<T> context)
+    {
+        Debug.Log($"即将执行: {skill.InformationLayer.Name}");
+        return true; // false → 取消执行
+    }
+
+    public override void OnAfterExecute<T>(ISkill<T> skill, SkillContext<T> context, SkillExecutionResult result)
+    {
+        Debug.Log($"执行结果: {result}");
+    }
+}
+
+// 注册全局中间件
+SkillSystemServices.RegisterMiddleware(new LoggingMiddleware());
+```
+
+**执行顺序**：`Order` 越小越先执行；先全局 `SkillSystemServices.GlobalMiddleware`，再本次传入的局部列表。
+
+### 5.11 网络扩展点
+
+框架提供 **钩子接口**，不含具体网络实现：
+
+```csharp
+public class SkillCommand
+{
+    public string skillName;
+    public int casterEntityId, targetEntityId;
+    public int tick, randomSeed;
+    public string triggerEvent;
+    public Vector3 targetPos;
+}
+
+public interface ISkillNetworkBridge<T>
+{
+    bool ValidateServer(SkillCommand command, T caster);
+    void ApplyPredicted(SkillCommand command, T caster);
+    void Rollback(SkillCommand command, T caster);
+    SkillCommand CreateCommand(ISkill<T> skill, SkillContext<T> context);
+}
+```
+
+配合 `SkillExecutionMeta.networkRole` 与 `IRandomProvider` 种子实现确定性回放。
+
+### 5.12 黑板与执行元数据
+
+```csharp
+public struct SkillExecutionMeta
+{
+    public int executionId;          // 唯一执行 ID
+    public int tick;               // 逻辑帧
+    public NetworkRole networkRole;
+    public ISkillClock clock;        // 可注入 deterministic 时钟
+    public IRandomProvider random;   // 可注入 seeded 随机
+    public SkillBlackboard blackboard;
+    public string triggerEvent;
+    public bool cancelled;
+}
+
+// 使用黑板在机制间传递临时数据
+context.meta.blackboard.Set("HitCount", 3);
+context.meta.blackboard.TryGet<int>("HitCount", out var count);
+```
+
+**全局服务**：
+
+```csharp
+SkillSystemServices.Clock = myDeterministicClock;
+SkillSystemServices.Random = mySeededRandom;
+SkillSystemServices.RegisterMiddleware(...);
+```
 
 ---
 
-## 6. 编辑器工具
+## 6. 编辑器工具指南
 
-### 6.1 技能编辑器窗口 (Skill Editor Window)
+### 6.1 菜单总览
 
- **打开方式**：`Tech-Cosmos → SkillSystem → Skill Editor Window`
+```
+Tech-Cosmos/SkillSystem/
+├── Generator/
+│   ├── Generate ALL Classes           ← 机制 + 条件 + SkillDataSO + 枚举
+│   ├── Generate Mechanism Classes
+│   ├── Generate Condition Classes
+│   ├── Generate SkillDataSO Only
+│   ├── Update TriggerEvent Enum
+│   ├── Validate All Skill Assets      ← 扫描全部 SkillDataSO
+│   └── Clear All Generated
+├── Skill Editor Window                ← 主技能编辑器
+├── Buff Editor Window
+├── Graph Editor / Open Graph Editor   ← 节点图
+├── Condition Tree Editor Window
+├── Mechanism Tree Editor Window
+├── TriggerEvent Enum Editor
+├── Create Skill Script
+├── Create Buff Script
+├── Generate BuffEffect Classes / ...
+├── Buff Enum Editor
+├── Samples/Create Demo Scene
+└── Documentation                      ← 代码生成快速说明
+```
 
- **主要功能**：
+### 6.2 技能编辑器窗口
 
-- ✅ 可视化编辑所有技能属性
-- ✅ 条件和机制的多态选择
-- ✅ 数据层可视化编辑（带类型着色）
-- ✅ 公式编辑器（语法帮助 + 字段引用插入 + 公式检查）
-- ✅ 必要数据自动同步与锁定
-- ✅ 类型冲突检测与报错
-- ✅ 类型切换白名单控制
-- ✅ 数据依赖来源显示
-- ✅ 自动保存和缓存优化
+**打开**：`Tech-Cosmos → SkillSystem → Skill Editor Window`
 
-### 6.2 机制选择抽屉 (MechanismDrawer)
-
-- 自动按分类分组显示
-- 支持 "Switch"（切换）、"Copy"（复制 JSON）、"Remove"（删除）操作
-- 类型安全筛选（只显示可实例化的非泛型子类）
-
-### 6.3 条件选择抽屉 (ConditionDrawer)
-
-- 自动按分类分组显示
-- 支持 "Switch"（切换）、"Remove"（删除）操作
-- 类型安全筛选
-
-### 6.4 公式值选择抽屉 (FormulaValueDrawer)
-
-- 可视化编辑四种公式类型
-- 引用路径支持下拉菜单选择字段
-- 操作符选择（乘/加/设）
-- 一键升级为自定义公式
-
-### 6.5 触发事件枚举编辑器
-
- **打开方式**：`Tech-Cosmos → SkillSystem → TriggerEvent Enum Editor`
-
-- 可视化管理所有触发事件类型
-- 支持添加/删除/重命名事件
-- 自动生成 `TriggerEventType.cs` 文件
-
-### 6.6 创建技能脚本窗口
-
- **打开方式**：`Tech-Cosmos → SkillSystem → Create Skill Script`
-
-- 可视化选择目标 Unit 类型
-- 支持搜索过滤
-- 自动生成机制/条件模板代码
-- 支持命名空间和类名自定义
-
-### 6.7 Buff 编辑器窗口 (Buff Editor Window)
-
-**打开方式**：`Tech-Cosmos → SkillSystem → Buff Editor Window`
-
-- 可视化编辑 `BuffDataSO`：基础信息、标签、叠层策略
-- 配置属性修改器（支持公式）
-- 配置 Action 响应与效果执行器
-- 支持从选中资产快速打开
-
-### 6.8 Buff 效果与执行模式生成
-
-| 菜单 | 功能 |
+| 区域 | 功能 |
 |------|------|
-| `Tech-Cosmos → SkillSystem → Create Buff Script` | 创建自定义 Buff 效果 / 执行模式脚本 |
-| `Tech-Cosmos → SkillSystem → Generate BuffEffect Classes` | 生成封闭泛型 BuffEffect 类 |
-| `Tech-Cosmos → SkillSystem → Generate ExecutionMode Classes` | 生成封闭泛型 ExecutionMode 类 |
-| `Tech-Cosmos → SkillSystem → Generate All BuffEffect Classes` | 一键生成全部 Buff 相关类 |
-| `Tech-Cosmos → SkillSystem → Buff Enum Editor` | 管理 BuffModifyType / BuffActionType / BuffTag 枚举 |
+| 基础信息 | 名称、描述、类型、`TriggerEvents` 列表 |
+| Profile | 优先级、读条、引导、打断、标签 |
+| 条件 | 条件树可视化 / 旧版列表切换 |
+| 机制 | 机制树 / 平铺列表切换 |
+| Timeline | 时间轴片段编辑 |
+| 数据层 | 键值编辑、公式、RequiredData 锁定项 |
+| 公式 | 语法帮助、字段引用、校验 |
 
-### 6.9 Graph 节点图编辑器（Shader Graph 风格）
+特性：自动保存、RequiredData 同步、类型冲突检测、🔒 锁定必要数据。
 
-**打开方式**：
-- `Tech-Cosmos → SkillSystem → Graph Editor`
-- 选中 `SkillDataSO` / `BuffDataSO` 后：`Tech-Cosmos → SkillSystem → Open Graph Editor`
+### 6.3 条件树 / 机制树编辑器
 
-**技能图节点**：
-| 节点 | 说明 |
+- 在 Skill Editor 内嵌编辑，也可打开独立窗口
+- 右键添加节点：Leaf / And / Or / Not / Ref（条件）或 Leaf / Sequence / Parallel / Ref（机制）
+- **Ref** 节点指向 Composite SO，实现跨技能复用
+
+### 6.4 节点图编辑器 (Graph Editor)
+
+Shader Graph 风格，支持 SkillDataSO / BuffDataSO / Composite SO。
+
+| 操作 | 说明 |
 |------|------|
-| 触发器 | 触发事件、技能类型、名称 |
-| 条件门 | 内嵌条件树编辑（AND/OR/NOT） |
-| 机制 #N | 每个机制一块，可右键添加 |
-| 时间轴 | Timeline 配置分支 |
+| 滚轮 | 缩放 |
+| 拖拽空白 | 平移 |
+| 右键画布 | 添加节点 |
+| 节点内编辑 | 与列表编辑器数据实时同步 |
+| 布局 | 保存到 `graphLayout` 字段 |
 
-**Buff 图节点**：
-| 节点 | 说明 |
-|------|------|
-| Buff 根节点 | 名称、时长、叠层、标签 |
-| 修改器 #N | 属性修改器列表项 |
-| 执行器 #N | BuffEffectExecuter 列表项 |
-| Action #N | 事件响应列表项 |
+### 6.5 PropertyDrawer
 
-**操作**：
-- 滚轮缩放、拖拽平移画布（与 Shader Graph 相同）
-- 右键画布添加节点
-- 节点位置自动保存到资产的 `graphLayout` 字段
-- 节点内直接编辑序列化字段，与列表编辑器数据同步
+| Drawer | 用途 |
+|--------|------|
+| `MechanismDrawer` | 机制多态选择，按 `[MechanismMenu]` 分类 |
+| `ConditionDrawer` | 条件多态选择，按 `[ConditionMenu]` 分类 |
+| `FormulaValueDrawer` | 公式四种类型可视化 |
+
+### 6.6 资产校验器
+
+```
+Tech-Cosmos → SkillSystem → Generator → Validate All Skill Assets
+```
+
+检查项：名称为空、无触发事件、机制为空、Timeline 时长异常、条件树/列表均未配置等。
 
 ---
 
 ## 7. 代码生成系统
 
-### 7.1 生成流程
-
-```
-[标记 Attribute]
-    │
-    ├── [GenerateSkillDataSO]  在 IUnit 实现类上
-    ├── [SkillDataField]       在字段上
-    ├── [AutoGenerateMechanism] 在泛型 Mechanism 子类上
-    ├── [AutoGenerateCondition] 在泛型 Condition 子类上
-    └── [GenerateMechanismsFor] 在 IUnit 实现类上（批量生成）
-            │
-            ▼
-    菜单: Generate ALL Classes
-            │
-            ▼
-    生成以下文件:
-    ├── Assets/Generated/Mechanisms/*.g.cs
-    ├── Assets/Generated/Conditions/*.g.cs
-    └── Assets/Generated/SkillDataSO/*.g.cs
-```
-
-### 7.2 可用的特性标记 (Attributes)
+### 7.1 特性标记一览
 
 | 特性 | 目标 | 作用 |
 |------|------|------|
-| `[GenerateSkillDataSO]` | Class (IUnit 实现) | 标记生成 SkillDataSO 子类 |
-| `[GenerateMechanismsFor]` | Class (IUnit 实现) | 为其生成所有无指定目标类型的机制 |
-| `[AutoGenerateMechanism]` | Class (泛型 Mechanism) | 指定目标 Unit 类型或全局生成 |
-| `[AutoGenerateCondition]` | Class (泛型 Condition) | 指定目标 Unit 类型 |
-| `[SkillDataField]` | Field/Property | 暴露字段到数据层 |
-| `[SkillDataEntry]` | Field/Property | 添加额外的数据条目 |
-| `[RequiredData]` | Class | 声明机制/条件所需的数据项，支持公式类型和类型白名单 |
-| `[DataEntryType]` | Class/Struct | 标记可添加到数据层的自定义类型 |
-| `[MechanismMenu]` | Class | 自定义编辑器菜单分类和显示名 |
+| `[GenerateSkillDataSO]` | Unit 类 | 生成 `XxxSkillDataSO` |
+| `[GenerateMechanismsFor]` | Unit 类 | 批量生成未指定 Target 的机制 |
+| `[AutoGenerateMechanism]` | 泛型 Mechanism | 生成 `MechanismName<T>.g.cs` |
+| `[AutoGenerateCondition]` | 泛型 Condition | 生成 `ConditionName<T>.g.cs` |
+| `[SkillDataField]` | 字段 | 暴露到 SO 数据层 / 公式引用 |
+| `[SkillDataEntry]` | 字段 | 额外数据条目 |
+| `[RequiredData]` | Mechanism/Condition | 声明依赖数据，编辑器自动同步 |
+| `[DataEntryType]` | 自定义 struct/class | 可添加到数据层的类型 |
+| `[MechanismMenu]` | Mechanism | 编辑器菜单分类 |
+| `[ConditionMenu]` | Condition | 编辑器菜单分类 |
 
-### 7.3 RequiredDataAttribute 完整参数
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `Key` | string | 数据键名（对应 DataLayer.GetValue 的 key） |
-| `ValueType` | Type | 数据类型 |
-| `DefaultValue` | string | 默认值（字符串形式，float 默认 0，int 默认 0，string 默认 ""，bool 默认 false） |
-| `Description` | string | 描述文字（显示在数值层条目标题和依赖来源中） |
-| `IsFormula` | bool | 是否是公式类型（设为 true 则自动创建 FormulaValue） |
-| `FormulaType` | FormulaType | 公式类型（IsFormula=true 时生效） |
-| `StaticValue` | float | 公式的静态默认值（IsFormula=true 时生效） |
-| `ReferencePath` | string | 公式的引用路径（IsFormula=true 且 FormulaType=Reference 时生效） |
-| `CustomFormula` | string | 公式的自定义表达式（IsFormula=true 且 FormulaType=Custom 时生效） |
-| `AllowedTypes` | Type[] | 允许切换到的类型白名单（为 null 或空数组表示允许所有类型） |
-
-### 7.4 菜单功能一览
+### 7.2 生成流程
 
 ```
-Tech-Cosmos/SkillSystem/
-├── Generator/
-│   ├── Generate ALL Classes          (生成所有代码)
-│   ├── Generate Mechanism Classes     (仅生成机制)
-│   ├── Generate Condition Classes    (仅生成条件)
-│   ├── Generate SkillDataSO Only     (仅生成数据配置)
-│   └── Clear All Generated           (清理生成文件)
-├── Skill Editor Window               (技能编辑器)
-├── Buff Editor Window                (Buff 编辑器)
-├── Create Buff Script                (创建 Buff 脚本)
-├── Generate All BuffEffect Classes   (生成 Buff 效果类)
-├── Buff Enum Editor                  (Buff 枚举编辑器)
-├── Graph Editor                      (技能/Buff 节点图编辑器)
-├── TriggerEvent Enum Editor          (枚举编辑器)
-├── Create Skill Script               (创建技能脚本)
-└── Documentation                     (文档)
+编写 Mechanism<T> / Condition<T> + Attribute
+        ↓
+Generate ALL Classes
+        ↓
+Assets/Generated/Mechanisms/*.g.cs    （封闭子类，可 SerializeReference）
+Assets/Generated/Conditions/*.g.cs
+Assets/Generated/SkillDataSO/*.g.cs
+TriggerEventType.cs 更新
+        ↓
+Unity 编译 → 编辑器菜单可选新类型
+```
+
+### 7.3 .gitignore 建议
+
+```gitignore
+Assets/Generated/
 ```
 
 ---
 
-## 8. API 参考
+## 8. 实战食谱 (Cookbook)
 
-### 8.1 SkillFactory<T>
+### 8.1 带冷却的主动攻击技能
+
+1. 条件树：`Leaf → CooldownCondition`（cooldown = 2s）
+2. 机制：`DamageMechanism`
+3. 数据层：`DamageFormula = caster.Attack * 1.2`
+4. `TriggerEvents = ["OnAttack"]`
+
+### 8.2 读条火球术
+
+1. Profile：`castTime = 1.5f`，`canBeInterrupted = true`
+2. 单位继承 `UnitBase`（自动走 ExecutionController）
+3. 机制：`DamageMechanism` + `ApplyBuffMechanism`（Burn）
+4. 监听打断：
 
 ```csharp
-public static class SkillFactory<T> where T : class, IUnit<T>
-{
-    // 从 SkillData 数据对象创建
-    public static ISkill<T> CreateSkill(SkillData<T> data);
-
-    // 从 SkillDataSO 资产创建
-    public static ISkill<T> CreateSkill(SkillDataSO<T> skillDataSO);
-}
+hero.ExecutionController.OnCastInterrupted += (skill, reason) =>
+    Debug.Log($"打断: {skill.InformationLayer.Name} 原因={reason}");
 ```
 
-### 8.2 SkillData<T>
+### 8.3 多段伤害时间轴
 
-技能的纯数据表示，用于运行时创建：
+1. 主机制：播放动画/特效
+2. Timeline：`enabled = true`，`totalDuration = 1.0`
+3. Clips：
+   - `t=0.3` Mechanism → DamageMechanism（50%）
+   - `t=0.6` Mechanism → DamageMechanism（50%）
+   - `t=0.3` EventMarker → `"OnTimelineHit"`
+
+### 8.4 被动光环
+
+1. `SkillType = Passive`
+2. 机制：`ApplyBuffMechanism`（applyToTarget=false，施加到自己）
+3. `AddSkill` 时自动激活
+
+### 8.5 复合条件复用
+
+1. 创建 `CompositeConditionSO`："目标被眩晕"
+   - `And( HasTag("Stun"), Leaf: 自定义条件 )`
+2. 多个技能条件树中添加 `Ref → 目标被眩晕`
+
+### 8.6 纯代码构建技能（无 SO）
 
 ```csharp
-public class SkillData<T> where T : class, IUnit<T>
+var data = new SkillData<Hero>
 {
-    public SkillType SkillType;          // 主动/被动
-    public string TriggerEvent;          // 触发事件名
-    public List<Condition<T>> Conditions; // 条件列表
-    public string SkillName;             // 技能名称
-    public string SkillDescription;      // 技能描述
-    public List<Action<SkillContext<T>>> FuncMechanisms;  // 函数式机制
-    public List<MechanismBase> Mechanisms;  // 对象式机制
-    public Dictionary<string, object> Data;  // 数据层
+    SkillType = SkillType.Active,
+    TriggerEvents = new List<string> { "OnAttack" },
+    SkillName = "代码重击",
+    Profile = new SkillProfile { executionPriority = 5 }
+};
 
-    // 添加/移除机制
-    public void AddMechanism(Action<SkillContext<T>> mechanism);
-    public void AddMechanism(Mechanism<T> mechanism);
-    public void ClearMechanism();
+data.AddCondition(new CooldownCondition<Hero>(1.5f));
+data.AddMechanism(new Action<SkillContext<Hero>>(ctx =>
+    Debug.Log($"重击! {ctx.target}")));
 
-    // 添加/移除条件
-    public void AddCondition(Condition<T> condition);
-    public void ClearCondition();
-
-    // 数据操作
-    public void SetValue<TValue>(string key, TValue value);
-    public TValue GetValue<TValue>(string key);
-}
+var skill = SkillFactory<Hero>.CreateSkill(data);
+hero.AddSkill(skill);
 ```
 
-### 8.3 ConditionBase / Condition<T>
+### 8.7 附加资源路径（图标/特效）
 
 ```csharp
-// 非泛型基类 (可用于 SerializeReference)
-public abstract class ConditionBase
-{
-    public abstract bool IsEligible(object context, IDataLayerBase dataLayer);
-}
-
-// 泛型基类
-public abstract class Condition<T> : ConditionBase where T : class, IUnit<T>
-{
-    public abstract bool IsEligible(SkillContext<T> skillContext, IDataLayer<T> dataLayer);
-
-    // 运算符重载
-    public static Condition<T> operator &(Condition<T> left, Condition<T> right);  // AND
-    public static Condition<T> operator |(Condition<T> left, Condition<T> right);  // OR
-    public static Condition<T> operator !(Condition<T> condition);                 // NOT
-}
-```
-
-### 8.4 MechanismBase / Mechanism<T>
-
-```csharp
-// 非泛型基类
-public abstract class MechanismBase
-{
-    public abstract void ExecuteBase(object context, IDataLayerBase dataLayer);
-    public virtual string GetDisplayName();
-}
-
-// 泛型基类
-public abstract class Mechanism<T> : MechanismBase where T : class, IUnit<T>
-{
-    public virtual void Execute(SkillContext<T> context, IDataLayer<T> dataLayer);
-    public virtual void SkillBack(ISkill<T> skill);
-}
-```
-
-### 8.5 FormulaEvaluator
-
-```csharp
-public static class FormulaEvaluator
-{
-    // 泛型版本
-    public static float Evaluate<T>(SkillContext<T> context, string formula)
-        where T : class, IUnit<T>;
-
-    // 非泛型版本
-    public static float Evaluate(SkillContextBase context, string formula);
-}
-```
-
-### 8.6 UnitEvent<T>
-
-```csharp
-public class UnitEvent<T> where T : class, IUnit<T>
-{
-    public void Subscribe(string eventName, Action<SkillContext<T>> action);
-    public void Unsubscribe(string eventName, Action<SkillContext<T>> action);
-    public void Trigger(string eventName, SkillContext<T> skillContext);
-    public int GetSubscriberCount(string eventName);
-    public bool HasEvent(string eventName);
-    public void ClearEvent(string eventName);
-    public void ClearAllEvents();
-}
-```
-
-### 8.7 ConditionPool<T>
-
-```csharp
-public static class ConditionPool<T> where T : class, IUnit<T>
-{
-    // 租用 And 条件
-    public static Condition<T> RentAnd(Condition<T> a, Condition<T> b);
-    public static Condition<T> RentAnd(Condition<T> a, Condition<T> b, Condition<T> c);
-
-    // 租用 Or 条件
-    public static Condition<T> RentOr(Condition<T> a, Condition<T> b);
-    public static Condition<T> RentOr(Condition<T> a, Condition<T> b, Condition<T> c);
-
-    // 租用 Not 条件
-    public static Condition<T> RentNot(Condition<T> condition);
-
-    // 归还到池中
-    public static void Return(AndCondition<T> condition);
-    public static void Return(OrCondition<T> condition);
-    public static void Return(NotCondition<T> condition);
-}
-```
-
-### 8.8 RequiredDataAttribute
-
-```csharp
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
-public class RequiredDataAttribute : Attribute
-{
-    public string Key { get; }                    // 数据键名
-    public Type ValueType { get; }                // 数据类型
-    public string DefaultValue { get; set; }       // 默认值（字符串形式）
-    public string Description { get; set; }        // 描述文字
-    public bool IsFormula { get; set; }            // 是否是公式类型
-    public FormulaValue.FormulaType FormulaType { get; set; }  // 公式类型
-    public float StaticValue { get; set; }         // 公式的静态默认值
-    public string ReferencePath { get; set; }      // 公式的引用路径
-    public string CustomFormula { get; set; }      // 公式的自定义表达式
-    public Type[] AllowedTypes { get; set; }       // 允许切换到的类型白名单
-}
-```
-
-### 8.9 BuffSystem<T> 与 IBuffHost<T>
-
-```csharp
-// Buff 宿主（UnitBase 已实现）
-public interface IBuffHost<T> : IBuffHost where T : class
-{
-    BuffSystem<T> BuffSystem { get; }
-}
-
-// Buff 管理系统
-public class BuffSystem<T> where T : class
-{
-    public event Action<IBuff<T>> OnBuffAdded;
-    public event Action<IBuff<T>> OnBuffRemoved;
-
-    public void BuffUpdate(float deltaTime);
-    public void AddBuff(IBuff<T> buff);
-    public void RemoveBuffsByName(string buffName);
-    public void DispelByTags(params string[] tags);
-    public IBuff<T> FindBuffByName(string buffName);
-    public float GetModifiedValue(string modifyType, float baseValue, BuffModifyContext<T> context = null);
-    public void DispatchAction(string actionName, T caster, T target, float value = default, string damageType = default);
-}
-
-// 数据驱动 Buff 配置
-[CreateAssetMenu(menuName = "SkillSystem/Buff Data")]
-public class BuffDataSO : ScriptableObject { ... }
+var skill = SkillFactory<Hero>.CreateSkill(so)
+    .WithResources(
+        ("Icon", "UI/Skills/Slash"),
+        ("VFX", "VFX/Slash"));
+var iconPath = skill.GetResource("Icon");
 ```
 
 ---
 
-## 9. 高级用法
+## 9. API 速查
 
-### 9.1 条件组合与对象池
-
-```csharp
-// 使用运算符组合条件（自动使用对象池）
-var healthCheck = new FuncCondition<Character>(ctx => ctx.caster.Health > 0);
-var manaCheck = new FuncCondition<Character>(ctx => ctx.caster.Mana > 10);
-
-// 自动从 ConditionPool 租用
-Condition<Character> combined = healthCheck & manaCheck;
-
-// 使用完毕后归还
-ConditionPool<Character>.Return(combined as AndCondition<Character>);
-```
-
-### 9.2 自定义条件缓存
-
-当条件计算开销较大时，使用 `CachedCondition<T>` 包装：
+### SkillFactory
 
 ```csharp
-var heavyCondition = new FuncCondition<Character>(ctx =>
-{
-    return Vector3.Distance(ctx.caster.Position, ctx.target.Position) < 5f;
-});
-
-// 包装为缓存条件，相同上下文直接返回缓存结果
-var cached = new CachedCondition<Character>(heavyCondition);
+SkillFactory<T>.CreateSkill(SkillData<T> data);
+SkillFactory<T>.CreateSkill(SkillDataSO<T> so);
+// 扩展
+skillDataSO.CreateSkill<T>();  // SkillDataSOExtensions
 ```
 
-### 9.3 动态公式与数据引用
-
-在 `SkillDataSO` 编辑器中配置自定义公式：
-
-```
-caster.Attack * 2.0 - target.Defense * 0.5
-caster.MagicAttack * 0.3 + target.MaxHealth * 0.1
-(caster.Attack + caster.Defense) * caster.Level * 0.1
-```
-
-### 9.4 使用 RequiredData 声明公式类型数据
+### SkillContext
 
 ```csharp
-[RequiredData("HealAmount", typeof(float), IsFormula = true,
-    FormulaType = FormulaValue.FormulaType.Custom,
-    CustomFormula = "caster.MagicAttack * 0.5 + target.MaxHealth * 0.2",
-    Description = "治疗量公式")]
-[AutoGenerateMechanism(typeof(Character))]
-[MechanismMenu("💚 治疗", DisplayName = "治疗机制")]
-public class HealMechanism<T> : Mechanism<T> where T : class, IUnit<T>
-{
-    public override void Execute(SkillContext<T> context, IDataLayer<T> dataLayer)
-    {
-        // 公式会自动求值
-        float healAmount = dataLayer.GetValue<float>("HealAmount", context);
-        // context.Target.Heal(healAmount);
-    }
-}
+var ctx = new SkillContext<T>(caster, target, targetPos);
+ctx = ctx.WithSkill(skill);
+ctx.meta.blackboard.Set("key", value);
 ```
 
-### 9.5 使用 AllowedTypes 限制类型切换
+### Condition 运算符
 
 ```csharp
-// 只允许 float 和 FormulaValue 类型
-[RequiredData("DamageMultiplier", typeof(float), DefaultValue = "1.0",
-    Description = "伤害倍率",
-    AllowedTypes = new[] { typeof(float), typeof(FormulaValue) })]
-
-// 只允许 int 和 float 类型
-[RequiredData("StackCount", typeof(int), DefaultValue = "1",
-    Description = "堆叠层数",
-    AllowedTypes = new[] { typeof(int), typeof(float) })]
+Condition<T> c = a & b | !c;
+ConditionPool<T>.RentAnd(a, b);
+ConditionPool<T>.Return(andCondition);
 ```
 
-### 9.6 技能回调
-
-机制可以实现 `SkillBack` 方法：
+### Pipeline
 
 ```csharp
-public class ApplyBuffMechanism<T> : Mechanism<T> where T : class, IUnit<T>
-{
-    public override void Execute(SkillContext<T> context, IDataLayer<T> dataLayer)
-    {
-        // 通过 buffData 或 buffId 施加增益
-    }
+SkillExecutionPipeline.Execute(skill, context, middleware, policy);
+SkillExecutionResult result; // Success, ConditionFailed, Cancelled, Error...
+```
 
-    public override void SkillBack(ISkill<T> skill)
-    {
-        // 技能回滚时移除增益，清理资源
-    }
-}
+### ExecuteLayer 事件
+
+```csharp
+skill.ExecuteLayer.Executing += ctx => { };
+skill.ExecuteLayer.Executed += ctx => { };
+skill.ExecuteLayer.Failed += ctx => { };
+ExecuteLayer<T>.OnAnySkillExecuted += ctx => { }; // 全局
+```
+
+### FormulaEvaluator
+
+```csharp
+FormulaEvaluator.Evaluate(context, "caster.Attack * 2");
+FormulaEvaluator.EvaluateExpressionStatic("(2+3)*4");
+FormulaEvaluator.ClearCache();
 ```
 
 ---
 
-## 10. 最佳实践
+## 10. 项目结构
 
-### 10.1 项目组织建议
+```
+Tech-Cosmos.Framework.SkillSystem/
+├── package.json
+├── README.md
+├── Runtime/
+│   ├── Core/                 Skill, SkillContext, UnitBase, SkillProfile,
+│   │                         SkillHolder, SkillSystemServices, SkillBlackboard...
+│   ├── Layers/               六层实现 + Interfaces
+│   ├── Conditions/           条件基类、组合、内置、Tree、Presets
+│   ├── Mechanisms/           机制基类、内置、Composite、Tree、Presets
+│   ├── Data/                 SkillData, SkillDataSO
+│   ├── Pipeline/             SkillExecutionPipeline, Middleware, Result, Trace
+│   ├── State/                SkillExecutionController
+│   ├── Timeline/             SkillTimelineData, Service, Player
+│   ├── Buff/                 GBF 核心 + IBuffHost, TagContainer, SimpleBuff
+│   ├── Events/               UnitEvent
+│   ├── Network/              SkillCommand, ISkillNetworkBridge
+│   ├── Management/           SkillFactory
+│   ├── Extensions/           ResourceLayer, SkillDataSO 扩展
+│   ├── FormulaEvaluator.cs
+│   └── SystemAttribute.cs    全部代码生成/编辑器特性
+├── Editor/
+│   ├── SkillDataSOEditorWindow.cs   主编辑器
+│   ├── ConditionTreeEditor.cs
+│   ├── MechanismTreeEditor.cs
+│   ├── SkillTimelineEditor.cs
+│   ├── SkillDataSOValidator.cs
+│   ├── MechanismCodeGenerator.cs    (MechanismCodeGeneratorV2)
+│   ├── Graph/                       节点图编辑器
+│   ├── Buff/                        Buff 编辑器与生成器
+│   └── *Drawer.cs                   Inspector 抽屉
+├── Samples~/Demo/            可导入 Demo
+└── Tests/Runtime/              单元测试
+```
+
+---
+
+## 11. 最佳实践
+
+### 项目组织
 
 ```
 Assets/
-├── TechCosmos.SkillSystem/     ← 框架代码（只读，含内置 Buff 子系统）
+├── Plugins/Tech-Cosmos.SkillSystem/   ← 框架（只读）
 ├── _Game/
 │   ├── Scripts/
-│   │   ├── Units/              ← IUnit / UnitBase 实现类
-│   │   ├── Mechanisms/         ← 自定义机制
-│   │   ├── Conditions/         ← 自定义条件
-│   │   ├── BuffEffects/        ← 自定义 Buff 效果
-│   │   └── DataEntryTypes/     ← 自定义数据类型
+│   │   ├── Units/                     ← UnitBase 子类
+│   │   ├── Mechanisms/
+│   │   ├── Conditions/
+│   │   └── BuffEffects/
 │   └── Resources/
-│       ├── Skills/             ← SkillDataSO 资产
-│       └── Buffs/              ← BuffDataSO 资产
-└── Generated/                  ← 自动生成的代码（建议 .gitignore）
-    └── SkillSystem/            ← Buff 枚举与效果生成输出
+│       ├── Skills/                    ← SkillDataSO
+│       ├── Buffs/                     ← BuffDataSO
+│       └── Composites/                ← Composite SO
+└── Generated/                         ← .gitignore
 ```
 
-### 10.2 性能优化建议
+### 设计原则
 
-1. **尽量使用函数式机制**：`Action<SkillContext<T>>` 比 `Mechanism<T>` 更轻量
-2. **使用 `CachedCondition<T>`**：缓存昂贵计算
-3. **使用对象池**：频繁创建/销毁的条件对象使用 `ConditionPool<T>`
-4. **批量生成代码后清理**：生成的 `.g.cs` 文件可加入 `.gitignore`
+1. **机制单一职责**：一个机制只做一件事
+2. **数值进数据层**：公式放 `FormulaValue`，逻辑放机制
+3. **优先 UnitBase**：不要重复造事件/Buff/施法轮子
+4. **条件树复用 Composite SO**：相同前置条件不要复制粘贴
+5. **Timeline 做分段**：多段伤害/多段特效用 Timeline，不要写一堆 Delay 协程
+6. **生成代码不入库**：CI 或本地 Generate ALL Classes
 
-### 10.3 设计建议
+### 性能
 
-1. **每个机制只做一件事**：如 `DamageMechanism`、`HealMechanism`、`ApplyBuffMechanism`
-2. **条件小而专注**：如 `HealthAboveCondition`、`HasBuffCondition`
-3. **Buff 优先用 BuffDataSO**：复杂效果走配置；简单测试可用 `SimpleBuff` 或 `ApplyBuffMechanism` 参数
-4. **数据公式与机制分离**：数值计算放在数据层公式中，逻辑放在机制中
-5. **使用 `[SkillDataField]` 暴露字段**：让策划可以调整数值而不修改代码
-6. **使用 `[RequiredData]` 声明依赖**：让编辑器自动管理必要数据项
-7. **使用 `AllowedTypes` 限制类型切换**：防止策划切换为不兼容的数据类型
-
-### 10.4 版本控制建议
-
-```gitignore
-# 自动生成的代码
-Assets/Generated/
-
-# SkillDataSO / BuffDataSO 资产可选择是否提交
-# Assets/_Game/Resources/Skills/*.asset
-# Assets/_Game/Resources/Buffs/*.asset
-```
+| 建议 | 原因 |
+|------|------|
+| 频繁条件组合用 `ConditionPool` | 减少 And/Or 对象分配 |
+| 昂贵条件用 `CachedCondition` | 同帧重复检查 |
+| 简单效果用 `Action` 机制 | 比 SerializeReference 更轻 |
+| 公式缓存 | `FormulaEvaluator` 内置表达式缓存 |
 
 ---
 
-## 11. 项目结构
+## 12. 常见问题 FAQ
 
-```
-TechCosmos.SkillSystem/
-│
-├── Runtime/                           # 运行时核心代码
-│   ├── Interfaces/
-│   │   ├── IUnit.cs                   # 核心 Unit 接口
-│   │   ├── ISkill.cs                  # 技能组合接口
-│   │   ├── ISkillLayer.cs             # 层接口基类
-│   │   ├── IBaseLayer.cs              # 基础层接口
-│   │   ├── IConditionLayer.cs         # 条件层接口
-│   │   ├── IDataLayer.cs              # 数据层接口
-│   │   ├── IExecuteLayer.cs           # 执行层接口
-│   │   ├── IInformationLayer.cs       # 信息层接口
-│   │   └── IMechanismLayer.cs         # 机制层接口
-│   │
-│   ├── Core/
-│   │   ├── Skill.cs                   # 技能组合实现
-│   │   ├── SkillContext.cs            # 技能上下文│   │   ├── SkillContextBase.cs        # 非泛型上下文
-│   │   ├── SkillData.cs               # 技能纯数据类
-│   │   ├── SkillDataSO.cs             # ScriptableObject 配置基类
-│   │   ├── SkillDataSOExtensions.cs   # SkillDataSO 扩展方法
-│   │   ├── SkillFactory.cs            # 技能工厂
-│   │   ├── SkillHolder.cs             # 技能持有者
-│   │   └── SkillType.cs               # 技能类型枚举
-│   │
-│   ├── Layers/
-│   │   ├── BaseLayer.cs               # 基础层抽象
-│   │   ├── ActiveBaseLayer.cs         # 主动技能基础层
-│   │   ├── PassiveBaseLayer.cs        # 被动技能基础层
-│   │   ├── ConditionLayer.cs          # 条件层实现
-│   │   ├── DataLayer.cs               # 数据层实现
-│   │   ├── ExecuteLayer.cs            # 执行层实现
-│   │   ├── InformationLayer.cs        # 信息层实现
-│   │   └── MechanismLayer.cs          # 机制层实现
-│   │
-│   ├── Conditions/                    # 条件系统
-│   │   ├── Condition.cs               # 泛型条件基类
-│   │   ├── AndCondition.cs            # AND 组合
-│   │   ├── OrCondition.cs             # OR 组合
-│   │   ├── NotCondition.cs            # NOT 组合
-│   │   ├── CachedCondition.cs         # 缓存装饰器
-│   │   ├── FuncCondition.cs           # 函数式条件
-│   │   ├── CooldownCondition.cs       # 冷却条件
-│   │   └── ConditionPool.cs           # 条件对象池
-│   │
-│   ├── Mechanisms/                    # 机制系统
-│   │   └── Mechanism.cs               # 泛型/非泛型机制基类
-│   │
-│   ├── Data/                          # 数据系统
-│   │   └── FormulaEvaluator.cs        # 公式求值器
-│   │
-│   ├── Events/                        # 事件系统
-│   │   └── UnitEvent.cs               # Unit 事件发布/订阅
-│   │
-│   ├── Buff/                          # Buff 子系统（原 GBF）
-│   │   ├── GBF/                       # 核心 Buff 引擎
-│   │   │   ├── BuffSystem.cs          # Buff 管理器
-│   │   │   ├── IBuff.cs               # Buff 接口
-│   │   │   ├── BaseBuff.cs            # Buff 基类
-│   │   │   ├── ConfigurableBuff.cs    # 数据驱动 Buff
-│   │   │   ├── BuffDataSO.cs          # Buff 配置资产
-│   │   │   ├── BuffEffect.cs          # Buff 效果
-│   │   │   └── BuffEffectExecuter.cs  # 效果执行器
-│   │   ├── SimpleBuff.cs              # 运行时轻量 Buff
-│   │   ├── IBuffHost.cs               # Buff 宿主接口
-│   │   └── TagContainer.cs            # 标签容器
-│   │
-│   └── Attributes/                    # 标记特性
-│       ├── RequiredDataAttribute.cs    # 必要数据声明（支持公式类型和类型白名单）
-│       ├── DataEntryTypeAttribute.cs   # 自定义数据类型标记
-│       ├── GenerateSkillDataSOAttribute.cs
-│       ├── SkillDataFieldAttribute.cs
-│       ├── SkillDataEntryAttribute.cs
-│       ├── AutoGenerateMechanismAttribute.cs
-│       ├── AutoGenerateConditionAttribute.cs
-│       ├── GenerateMechanismsForAttribute.cs
-│       └── MechanismMenuAttribute.cs
-│
-└── Editor/                            # 编辑器工具
-    ├── Drawers/
-    │   ├── ConditionDrawer.cs         # 条件多态选择抽屉
-    │   ├── MechanismDrawer.cs         # 机制多态选择抽屉
-    │   └── FormulaValueDrawer.cs      # 公式值编辑抽屉
-    │
-    ├── Windows/
-    │   ├── SkillDataSOEditorWindow.cs # 技能编辑器主窗口
-    │   ├── SkillDataSOEditor.cs       # 技能 Inspector 编辑器
-    │   ├── CreateSkillScriptWindow.cs # 创建脚本窗口
-    │   └── TriggerEventEnumEditor.cs  # 枚举编辑器
-    │
-    ├── Generators/
-    │   ├── MechanismCodeGeneratorV2.cs # 机制/条件代码生成器
-    │   ├── SkillDataSOGenerator.cs    # SkillDataSO 代码生成器
-    │   ├── SkillSystemGeneratorMenu.cs # 生成器菜单
-    │   └── TriggerEventEnumGenerator.cs # 枚举生成器
-    │
-    └── Buff/                            # Buff 编辑器
-        ├── BuffEditorWindow.cs        # Buff 配置编辑器
-        ├── BuffEffectCodeGenerator.cs # Buff 效果代码生成
-        ├── CreateBuffEffectWindow.cs  # 创建 Buff 脚本
-        ├── BuffEnumEditorWindow.cs    # Buff 枚举编辑器
-        └── BuffEffectExecuterDrawer.cs
-    │
-    └── Graph/                           # 节点图编辑器 (GraphView)
-        ├── TechCosmosGraphEditorWindow.cs
-        ├── Core/TechGraphCore.cs
-        ├── Skill/SkillGraphView.cs
-        ├── Buff/BuffGraphView.cs
-        └── Styles/TechGraphStyles.uss
-```
+### Q1: 机制/条件没有出现在编辑器菜单？
+
+1. 运行 **Generate ALL Classes**
+2. 确认类非 abstract、有 `[Serializable]`、已生成封闭子类
+3. 机制/条件菜单分类来自 `[MechanismMenu]` / `[ConditionMenu]`
+
+### Q2: 条件树改了但运行时不生效？
+
+1. 确认 `useConditionTree = true` 且 `conditionTreeRoot` 非空
+2. 叶子类型必须是 `Condition<YourUnit>` 的封闭子类
+3. 重新 `CreateSkill`（修改 SO 后需重新挂载或热重载）
+
+### Q3: 读条不生效？
+
+1. 施法者必须继承 `UnitBase` 或实现 `ISkillExecutionOwner<T>`
+2. `SkillProfile.castTime > 0`
+3. `UnitBase.Update` 会 Tick ExecutionController（不要禁用 Update）
+
+### Q4: Timeline 不播放？
+
+1. `Timeline.enabled = true` 且 `clips` 非空
+2. Pipeline 必须 **成功执行** 后才启动 Timeline
+3. 场景中有对象在 Tick：`UnitBase.Update` 或手动 `SkillTimelineService.Tick`
+
+### Q5: RequiredData 没有自动出现？
+
+1. 机制/条件已添加到技能中
+2. 重新打开 Skill Editor 或切换选中
+3. 运行 Generate ALL Classes
+
+### Q6: 公式引用字段找不到？
+
+1. 字段标记 `[SkillDataField]`
+2. 语法：`caster.Attack` / `target.MaxHealth`（区分大小写）
+3. 路径支持嵌套属性
+
+### Q7: 还需要单独装 BuffSystem 吗？
+
+**不需要**。v2.2.0+ 已内置 `Runtime/Buff/GBF/`。
+
+### Q8: 如何调试执行流程？
+
+1. 注册 `LoggingMiddleware`
+2. 订阅 `ExecuteLayer.Executing / Executed / Failed`
+3. Unity Profiler 查看 `SkillSystem.*` 标记
+4. 运行 `Tests/Runtime/SkillSystemCoreTests`
+
+### Q9: 多个技能同名会怎样？
+
+`SkillHolder` 后者覆盖前者并输出 Warning；请保证 `SkillName` 唯一。
+
+### Q10: 被动技能什么时候执行？
+
+`AddSkill(skill, caster)` 时立即执行一次；之后每次触发 `TriggerEvents` 中的事件也会执行。
 
 ---
 
-## 12. 常见问题
+## 13. 版本升级说明
 
-### Q1: 为什么生成的机制类没有出现在菜单中选择？
+### 从 v1.x / 早期 v2 升级
 
-**A**: 确保：
-1. 运行了 `Generate ALL Classes`
-2. 机制类不是抽象的
-3. 机制类有无参构造函数
-4. 机制类不是泛型类型定义（是封闭泛型）
-5. 机制类标记了 `[Serializable]`
+| 变更 | 迁移 |
+|------|------|
+| `TriggerEvent` 字符串 | → `TriggerEvents` 列表 |
+| 手动 IUnit 实现 | → 推荐 `UnitBase<T>` |
+| 平铺条件/机制 | → 可选条件树/机制树（旧字段仍兼容） |
+| 独立 BuffSystem 包 | → 删除旧包，用内置 Buff |
+| 直接 ExecuteLayer | → 主动技能默认走 Pipeline + ExecutionController |
 
-### Q2: 自定义公式中的字段引用找不到？
+### v2.3.0 新增摘要
 
-**A**: 确认：
-1. 字段标记了 `[SkillDataField]` 特性
-2. 数据类型是基础类型（float, int, Vector3 等）
-3. 公式语法正确：`caster.FieldName` 或 `target.FieldName`
+- 机制树（Sequence / Parallel / Ref）与 `CompositeMechanismSO`
+- 条件树 Ref 与 `CompositeConditionSO`
+- Graph 节点图编辑器
+- SkillDataSO 资产批量校验
+- 更完整的 Pipeline / Middleware / Trace / Profiler
 
-### Q3: RequiredData 声明后编辑器没有自动创建数据项？
+---
 
-**A**: 确保：
-1. 运行了 `Generate ALL Classes` 重新生成
-2. 在技能编辑器中打开了对应的 SkillDataSO
-3. 机制/条件已添加到技能中
+## 附录：设计原则
 
-### Q4: 如果两个不同的机制/条件对同一个 key 声明了不同类型的 RequiredData 会怎样？
+| 原则 | 说明 |
+|------|------|
+| 关注点分离 | 六层各司其职 |
+| 数据驱动 | SO 配置 + 公式 |
+| 类型安全 | 泛型 + 代码生成 |
+| 编辑器优先 | 可视化配置 > 硬编码 |
+| 可测试 | 核心逻辑有单元测试 |
+| 可扩展 | Middleware / NetworkBridge / 自定义层 |
 
-**A**: 编辑器会自动检测类型冲突，并在 Console 中输出详细的错误信息。
+---
 
-### Q5: 如何限制数据项只能切换为特定类型？
-
-**A**: 使用 `AllowedTypes` 参数：
-```csharp
-[RequiredData("MyValue", typeof(float), 
-    AllowedTypes = new[] { typeof(float), typeof(FormulaValue) })]
-```
-
-### Q6: 框架的性能开销如何？
-
-**A**: 框架在设计上考虑了性能：
-- 事件系统使用缓存的数组，避免 LINQ 和委托链 GC
-- 条件对象池减少 GC 压力
-- 公式求值使用手动实现的解析器，无外部依赖
-
-### Q7: 还需要单独安装 BuffSystem（GBF）包吗？
-
-**A**: **不需要**。v2.2.0 起 Buff 子系统已内置在 SkillSystem 中：
-- Runtime：`Runtime/Buff/GBF/`
-- Editor：`Editor/Buff/`
-- 若项目中仍有 `Tech-Cosmos.Framework.BuffSystem` 目录，请删除以避免重复编译
-
-### Q8: 如何在技能中施加 Buff？
-
-**A**: 两种方式：
-1. **数据驱动**：创建 `BuffDataSO`，在 `ApplyBuffMechanism` 中引用 `buffData` 字段
-2. **运行时参数**：配置 `buffId`、`duration`、`tags`、`modifiers`，由 `SimpleBuff<T>` 自动构建
-
-也可在代码中直接调用 `unit.BuffSystem.AddBuff(...)`。
-
-### Q9: Graph 节点图编辑器怎么用？
-
-**A**：
-1. 选中 `SkillDataSO` 或 `BuffDataSO` 资产
-2. 菜单 `Tech-Cosmos → SkillSystem → Open Graph Editor`
-3. 在画布上右键可添加机制 / 修改器 / 执行器等节点
-4. 节点内编辑与列表编辑器数据实时同步，布局保存在 `graphLayout` 字段
+**作者**: [Tech-Cosmos](https://github.com/PeterParkers007/Tech-Cosmos)  
+**反馈**: 3427463164@qq.com
