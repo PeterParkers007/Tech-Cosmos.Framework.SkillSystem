@@ -401,41 +401,59 @@ namespace TechCosmos.SkillSystem.Editor
 
             if (enumType == null)
             {
-                // 如果没有枚举类型，就用默认绘制
                 EditorGUILayout.PropertyField(triggerEventsProp, new GUIContent("触发事件列表"), true);
                 return;
             }
 
-            var enumNames = System.Enum.GetNames(enumType).Where(n => n != "None").ToArray();
+            var optionNames = System.Enum.GetNames(enumType)
+                .Where(n => n != "None")
+                .ToList();
 
-            // 获取当前选中的值
-            int mask = 0;
-            List<string> currentEvents = new List<string>();
+            var currentEvents = new List<string>();
             for (int i = 0; i < triggerEventsProp.arraySize; i++)
             {
-                currentEvents.Add(triggerEventsProp.GetArrayElementAtIndex(i).stringValue);
+                var evt = triggerEventsProp.GetArrayElementAtIndex(i).stringValue;
+                if (!string.IsNullOrEmpty(evt))
+                    currentEvents.Add(evt);
             }
 
-            for (int i = 0; i < enumNames.Length; i++)
+            // 资产中已有但枚举尚未包含的事件，也作为可选项展示
+            foreach (var evt in currentEvents)
             {
-                if (currentEvents.Contains(enumNames[i]))
+                if (!optionNames.Contains(evt))
+                    optionNames.Add(evt);
+            }
+
+            if (optionNames.Count == 0)
+            {
+                EditorGUILayout.HelpBox(
+                    "TriggerEventType 枚举为空。请运行 Tech-Cosmos → SkillSystem → Generator → Update TriggerEvent Enum，" +
+                    "或使用 TriggerEvent Enum Editor 添加事件。",
+                    MessageType.Warning);
+                EditorGUILayout.PropertyField(triggerEventsProp, new GUIContent("触发事件"), true);
+                return;
+            }
+
+            var displayedOptions = optionNames.ToArray();
+            int mask = 0;
+            for (int i = 0; i < displayedOptions.Length; i++)
+            {
+                if (currentEvents.Contains(displayedOptions[i]))
                     mask |= (1 << i);
             }
 
-            // 绘制 MaskField
-            int newMask = EditorGUILayout.MaskField("触发事件", mask, enumNames);
+            int newMask = EditorGUILayout.MaskField("触发事件", mask, displayedOptions);
 
-            // 更新列表
             if (newMask != mask)
             {
                 triggerEventsProp.ClearArray();
                 int index = 0;
-                for (int i = 0; i < enumNames.Length; i++)
+                for (int i = 0; i < displayedOptions.Length; i++)
                 {
                     if ((newMask & (1 << i)) != 0)
                     {
                         triggerEventsProp.InsertArrayElementAtIndex(index);
-                        triggerEventsProp.GetArrayElementAtIndex(index).stringValue = enumNames[i];
+                        triggerEventsProp.GetArrayElementAtIndex(index).stringValue = displayedOptions[i];
                         index++;
                     }
                 }
