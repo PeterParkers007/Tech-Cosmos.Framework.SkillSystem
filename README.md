@@ -1084,7 +1084,7 @@ unit.TriggerEvent("OnAttack", a, b);
 | 独立 Buff 包 | → 删除，用内置 Buff |
 | Generator 多级子菜单 | → 精简为 **Generate All** 等 11 项 |
 
-### v2.3.0 要点
+### v2.5.0 要点
 
 - 条件树 / 机制树 + Composite SO + Graph Editor  
 - 施法状态机（读条/引导/打断/优先级）  
