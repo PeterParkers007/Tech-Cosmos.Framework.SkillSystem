@@ -1,7 +1,7 @@
 # Tech-Cosmos 技能系统 (Skill System)
 
 > **包名**：`com.techcosmos.skillsystem`  
-> **版本**：2.3.0  
+> **版本**：2.5.0  
 > **Unity**：2022.3+  
 > **运行时**：.NET Standard 2.1 / C# 9.0+  
 > **测试状态**：✅ **79 项自动化测试全通过**（EditMode 61 + PlayMode 18）
