@@ -100,7 +100,9 @@ namespace TechCosmos.SkillSystem.Editor
             EditorGUILayout.LabelField("基础信息", EditorStyles.boldLabel);
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillType"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("TriggerEvents"), new GUIContent("触发事件"), true);
+            TriggerEventEditorUtility.DrawTriggerEventField(
+                serializedObject.FindProperty("TriggerEvents"),
+                serializedObject);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillName"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("SkillDescription"));
             EditorGUILayout.EndVertical();
@@ -727,16 +729,6 @@ namespace TechCosmos.SkillSystem.Editor
         }
 
         private bool IsSimpleType(Type t) => t.IsPrimitive || t == typeof(string) || t == typeof(float) || t == typeof(int) || t == typeof(bool) || t == typeof(double) || t.IsEnum || t == typeof(Vector2) || t == typeof(Vector3);
-
-        private static Type GetTriggerEventEnumType()
-        {
-            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-            {
-                var type = asm.GetType("TechCosmos.SkillSystem.Runtime.TriggerEventType");
-                if (type != null && type.IsEnum) return type;
-            }
-            return null;
-        }
 
         private List<(Type type, DataEntryTypeAttribute attr)> CollectDataEntryTypes()
         {

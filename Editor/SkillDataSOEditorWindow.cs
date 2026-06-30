@@ -83,36 +83,17 @@ namespace TechCosmos.SkillSystem.Editor
         {
             if (currentTarget == null) return;
             EditorUtility.SetDirty(currentTarget);
-            AssetDatabase.SaveAssets();
+            AssetDatabase.SaveAssetIfDirty(currentTarget);
         }
 
-        /// <summary>打开空的技能编辑器窗口。</summary>
-        [MenuItem("Tech-Cosmos/SkillSystem/Skill Editor Window")]
-        public static void OpenWindow()
+        /// <summary>打开技能编辑器；若已选中 SkillDataSO 则自动绑定。</summary>
+        [MenuItem("Tech-Cosmos/SkillSystem/Skill Editor", priority = 10)]
+        public static void OpenSkillEditor()
         {
             var window = GetWindow<SkillDataSOEditorWindow>("技能编辑器");
             window.minSize = new Vector2(600, 500);
-            window.Show();
-        }
-
-        [MenuItem("Tech-Cosmos/SkillSystem/Open Skill Editor", true)]
-        private static bool OpenWindowValidate() => Selection.activeObject is SkillDataSO;
-
-        /// <summary>打开技能编辑器窗口（与 Skill Editor Window 相同入口）。</summary>
-        [MenuItem("Tech-Cosmos/SkillSystem/Skill Timeline Editor", priority = 6)]
-        public static void OpenTimelineEditor()
-        {
-            OpenWindow();
-        }
-
-        /// <summary>从当前选中的 SkillDataSO 资产打开技能编辑器。</summary>
-        [MenuItem("Tech-Cosmos/SkillSystem/Open Skill Editor", priority = 5)]
-        public static void OpenFromSelection()
-        {
-            var so = Selection.activeObject as SkillDataSO;
-            if (so == null) return;
-            var window = GetWindow<SkillDataSOEditorWindow>("技能编辑器");
-            window.SetTarget(so);
+            if (Selection.activeObject is SkillDataSO so)
+                window.SetTarget(so);
             window.Show();
         }
 
@@ -384,81 +365,11 @@ namespace TechCosmos.SkillSystem.Editor
             EditorGUILayout.EndVertical();
         }
 
-        private static Type GetTriggerEventEnumType()
-        {
-            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-            {
-                var type = asm.GetType("TechCosmos.SkillSystem.Runtime.TriggerEventType");
-                if (type != null && type.IsEnum) return type;
-            }
-            return null;
-        }
-
         private void DrawTriggerEventMaskField()
         {
-            var triggerEventsProp = serializedObject.FindProperty("TriggerEvents");
-            var enumType = GetTriggerEventEnumType();
-
-            if (enumType == null)
-            {
-                EditorGUILayout.PropertyField(triggerEventsProp, new GUIContent("触发事件列表"), true);
-                return;
-            }
-
-            var optionNames = System.Enum.GetNames(enumType)
-                .Where(n => n != "None")
-                .ToList();
-
-            var currentEvents = new List<string>();
-            for (int i = 0; i < triggerEventsProp.arraySize; i++)
-            {
-                var evt = triggerEventsProp.GetArrayElementAtIndex(i).stringValue;
-                if (!string.IsNullOrEmpty(evt))
-                    currentEvents.Add(evt);
-            }
-
-            // 资产中已有但枚举尚未包含的事件，也作为可选项展示
-            foreach (var evt in currentEvents)
-            {
-                if (!optionNames.Contains(evt))
-                    optionNames.Add(evt);
-            }
-
-            if (optionNames.Count == 0)
-            {
-                EditorGUILayout.HelpBox(
-                    "TriggerEventType 枚举为空。请运行 Tech-Cosmos → SkillSystem → Generator → Update TriggerEvent Enum，" +
-                    "或使用 TriggerEvent Enum Editor 添加事件。",
-                    MessageType.Warning);
-                EditorGUILayout.PropertyField(triggerEventsProp, new GUIContent("触发事件"), true);
-                return;
-            }
-
-            var displayedOptions = optionNames.ToArray();
-            int mask = 0;
-            for (int i = 0; i < displayedOptions.Length; i++)
-            {
-                if (currentEvents.Contains(displayedOptions[i]))
-                    mask |= (1 << i);
-            }
-
-            int newMask = EditorGUILayout.MaskField("触发事件", mask, displayedOptions);
-
-            if (newMask != mask)
-            {
-                triggerEventsProp.ClearArray();
-                int index = 0;
-                for (int i = 0; i < displayedOptions.Length; i++)
-                {
-                    if ((newMask & (1 << i)) != 0)
-                    {
-                        triggerEventsProp.InsertArrayElementAtIndex(index);
-                        triggerEventsProp.GetArrayElementAtIndex(index).stringValue = displayedOptions[i];
-                        index++;
-                    }
-                }
-                serializedObject.ApplyModifiedProperties();
-            }
+            TriggerEventEditorUtility.DrawTriggerEventField(
+                serializedObject.FindProperty("TriggerEvents"),
+                serializedObject);
         }
 
         private void DrawProfile()
@@ -1110,25 +1021,13 @@ namespace TechCosmos.SkillSystem.Editor
                 existingKeys.Add(elem.FindPropertyRelative("key").stringValue);
             }
 
-            // 添加缺失的必需数据
+            // 仅自动添加缺失的必需数据，不删除用户手动添加的条目
             foreach (var key in requiredKeys)
             {
                 if (!existingKeys.Contains(key))
                 {
                     AddRequiredEntry(key);
                 }
-            }
-
-            // 移除不需要的
-            for (int i = serializedDataProp.arraySize - 1; i >= 0; i--)
-            {
-                var elem = serializedDataProp.GetArrayElementAtIndex(i);
-                var key = elem.FindPropertyRelative("key").stringValue;
-
-                if (requiredKeys.Contains(key)) continue;
-                if (cachedGeneratedKeys?.Contains(key) == true) continue;
-
-                serializedDataProp.DeleteArrayElementAtIndex(i);
             }
         }
 

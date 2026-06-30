@@ -1,5 +1,7 @@
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using TechCosmos.SkillSystem.Runtime;
 
 namespace TechCosmos.SkillSystem.Tests
@@ -87,6 +89,40 @@ namespace TechCosmos.SkillSystem.Tests
                     new StatModifier { statKey = "Attack", operation = ModifierOperation.Add, value = 5f }
                 }, null, BuffStackPolicy.ExtendDuration, 1));
             Assert.AreEqual(15f, system.GetModifiedValue("Attack", 10f), 0.001f);
+        }
+
+        /// <summary>HasAllBuff 要求每个 tag 在至少一个 Buff 上出现。</summary>
+        [Test]
+        public void HasAllBuff_RequiresEachTagAcrossBuffs()
+        {
+            var target = new MockTarget();
+            var system = new BuffSystem<MockTarget>(target);
+            system.AddBuff(new SimpleBuff<MockTarget>(
+                target, "StunBuff", 5f, new[] { "Stun" }, null, null, BuffStackPolicy.ExtendDuration, 1));
+            system.AddBuff(new SimpleBuff<MockTarget>(
+                target, "SlowBuff", 5f, new[] { "Slow" }, null, null, BuffStackPolicy.ExtendDuration, 1));
+
+            Assert.IsTrue(system.HasAllBuff("Stun", "Slow"));
+            Assert.IsFalse(system.HasAllBuff("Stun", "Poison"));
+        }
+
+        /// <summary>ClearBuff 应对每个 Buff 触发 OnBuffRemoved。</summary>
+        [Test]
+        public void ClearBuff_InvokesOnBuffRemovedForEachBuff()
+        {
+            var target = new MockTarget();
+            var system = new BuffSystem<MockTarget>(target);
+            system.AddBuff(new SimpleBuff<MockTarget>(
+                target, "A", 5f, null, null, null, BuffStackPolicy.ExtendDuration, 1));
+            system.AddBuff(new SimpleBuff<MockTarget>(
+                target, "B", 5f, null, null, null, BuffStackPolicy.ExtendDuration, 1));
+
+            int removedCount = 0;
+            system.OnBuffRemoved += _ => removedCount++;
+
+            system.ClearBuff();
+            Assert.AreEqual(2, removedCount);
+            Assert.AreEqual(0, system.BuffCount);
         }
     }
 
@@ -181,6 +217,35 @@ namespace TechCosmos.SkillSystem.Tests
 
             Object.DestroyImmediate(preset);
         }
+
+        /// <summary>循环 Ref 应记录警告并返回 null。</summary>
+        [Test]
+        public void CompileRefCondition_CircularReference_ReturnsNull()
+        {
+            var presetA = ScriptableObject.CreateInstance<CompositeConditionSO>();
+            var presetB = ScriptableObject.CreateInstance<CompositeConditionSO>();
+            presetA.conditionTreeRoot = new ConditionTreeRef { preset = presetB };
+            presetB.conditionTreeRoot = new ConditionTreeRef { preset = presetA };
+
+            LogAssert.Expect(LogType.Warning, new Regex(".*循环引用.*"));
+            var compiled = ConditionTreeCompiler.Compile<MockUnit>(new ConditionTreeRef { preset = presetA });
+            Assert.IsNull(compiled);
+
+            Object.DestroyImmediate(presetA);
+            Object.DestroyImmediate(presetB);
+        }
+
+        /// <summary>NOT 节点应反转子条件结果。</summary>
+        [Test]
+        public void CompileNotCondition_InvertsChild()
+        {
+            var tree = new ConditionTreeNot
+            {
+                child = new ConditionTreeLeaf { condition = new FuncCondition<MockUnit>(_ => true) }
+            };
+            var compiled = ConditionTreeCompiler.Compile<MockUnit>(tree);
+            Assert.IsFalse(compiled.IsEligible(default, null));
+        }
     }
 
     /// <summary>MechanismTreeCompiler 机制树编译测试。</summary>
@@ -241,6 +306,244 @@ namespace TechCosmos.SkillSystem.Tests
             Assert.AreEqual(1, counter.Count);
 
             Object.DestroyImmediate(preset);
+        }
+
+        /// <summary>循环 Ref 应记录警告并返回 null。</summary>
+        [Test]
+        public void CompileRefMechanism_CircularReference_ReturnsNull()
+        {
+            var presetA = ScriptableObject.CreateInstance<CompositeMechanismSO>();
+            var presetB = ScriptableObject.CreateInstance<CompositeMechanismSO>();
+            presetA.mechanismTreeRoot = new MechanismTreeRef { preset = presetB };
+            presetB.mechanismTreeRoot = new MechanismTreeRef { preset = presetA };
+
+            LogAssert.Expect(LogType.Warning, new Regex(".*循环引用.*"));
+            var compiled = MechanismTreeCompiler.Compile<MockUnit>(new MechanismTreeRef { preset = presetA });
+            Assert.IsNull(compiled);
+
+            Object.DestroyImmediate(presetA);
+            Object.DestroyImmediate(presetB);
+        }
+    }
+
+    /// <summary>SkillExecutionController 施法流程测试。</summary>
+    public class SkillExecutionControllerTests
+    {
+        private sealed class MockUnit : IUnit<MockUnit>
+        {
+            public string[] GetSupportedEvents() => new[] { "OnAttack" };
+            public void TriggerEvent(string eventName, SkillContext<MockUnit> context) { }
+            public void AddSkill(ISkill<MockUnit> skill) { }
+            public void RemoveSkill(ISkill<MockUnit> skill) { }
+        }
+
+        private static ISkill<MockUnit> CreateSkill(
+            SkillProfile profile,
+            System.Collections.Generic.List<Condition<MockUnit>> conditions = null)
+        {
+            var data = new SkillData<MockUnit>
+            {
+                SkillName = "TestSkill",
+                SkillType = SkillType.Active,
+                TriggerEvents = new System.Collections.Generic.List<string> { "OnAttack" },
+                Profile = profile,
+                Conditions = conditions ?? new System.Collections.Generic.List<Condition<MockUnit>>()
+            };
+            return SkillFactory<MockUnit>.CreateSkill(data);
+        }
+
+        [SetUp]
+        public void SetUp()
+        {
+            SkillSystemServices.Clock = new FixedSkillClock(0f, 0.5f);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            SkillSystemServices.Clock = new UnitySkillClock();
+        }
+
+        /// <summary>读条成功完成后应触发 OnCastCompleted。</summary>
+        [Test]
+        public void CompleteCast_FiresOnCastCompletedWhenPipelineSucceeds()
+        {
+            var skill = CreateSkill(new SkillProfile { castTime = 1f });
+            var controller = new SkillExecutionController<MockUnit>();
+            int completed = 0;
+            controller.OnCastCompleted += (_, __) => completed++;
+
+            Assert.IsTrue(controller.TryExecute(skill, new SkillContext<MockUnit>(new MockUnit())));
+            controller.Tick();
+            controller.Tick();
+
+            Assert.AreEqual(1, completed);
+        }
+
+        /// <summary>读条完成后条件失败时不应触发 OnCastCompleted。</summary>
+        [Test]
+        public void CompleteCast_SkipsOnCastCompletedWhenPipelineFails()
+        {
+            bool eligible = false;
+            var skill = CreateSkill(
+                new SkillProfile { castTime = 1f },
+                new System.Collections.Generic.List<Condition<MockUnit>>
+                {
+                    new FuncCondition<MockUnit>(_ => eligible)
+                });
+            var controller = new SkillExecutionController<MockUnit>();
+            int completed = 0;
+            controller.OnCastCompleted += (_, __) => completed++;
+
+            Assert.IsTrue(controller.TryExecute(skill, new SkillContext<MockUnit>(new MockUnit())));
+            controller.Tick();
+            controller.Tick();
+
+            Assert.AreEqual(0, completed);
+        }
+
+        /// <summary>打断施法时不应触发 OnCastCompleted。</summary>
+        [Test]
+        public void Interrupt_DoesNotFireOnCastCompleted()
+        {
+            var skill = CreateSkill(new SkillProfile { castTime = 2f, canBeInterrupted = true });
+            var controller = new SkillExecutionController<MockUnit>();
+            int completed = 0;
+            int interrupted = 0;
+            controller.OnCastCompleted += (_, __) => completed++;
+            controller.OnCastInterrupted += (_, __) => interrupted++;
+
+            Assert.IsTrue(controller.TryExecute(skill, new SkillContext<MockUnit>(new MockUnit())));
+            Assert.IsTrue(controller.TryInterrupt(InterruptReason.Manual));
+
+            Assert.AreEqual(0, completed);
+            Assert.AreEqual(1, interrupted);
+        }
+    }
+
+    /// <summary>SkillTimelineService 时间轴测试。</summary>
+    public class SkillTimelineServiceTests
+    {
+        private sealed class MockUnit : IUnit<MockUnit>
+        {
+            public string[] GetSupportedEvents() => new[] { "OnAttack" };
+            public void TriggerEvent(string eventName, SkillContext<MockUnit> context) { }
+            public void AddSkill(ISkill<MockUnit> skill) { }
+            public void RemoveSkill(ISkill<MockUnit> skill) { }
+        }
+
+        private sealed class CounterMechanism : Mechanism<MockUnit>
+        {
+            public int Count;
+            public override void Execute(SkillContext<MockUnit> context, IDataLayer<MockUnit> dataLayer)
+                => Count++;
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            SkillTimelineService.StopAll();
+        }
+
+        /// <summary>StopForOwner 只停止指定单位的时间轴。</summary>
+        [Test]
+        public void StopForOwner_OnlyStopsMatchingOwner()
+        {
+            var ownerA = new MockUnit();
+            var ownerB = new MockUnit();
+            var counterA = new CounterMechanism();
+            var counterB = new CounterMechanism();
+
+            var timelineA = new SkillTimelineData
+            {
+                enabled = true,
+                totalDuration = 1f,
+                clips = new System.Collections.Generic.List<SkillTimelineClip>
+                {
+                    new SkillTimelineClip
+                    {
+                        clipType = SkillTimelineClipType.Mechanism,
+                        startTime = 0f,
+                        mechanism = counterA
+                    }
+                }
+            };
+
+            var timelineB = new SkillTimelineData
+            {
+                enabled = true,
+                totalDuration = 1f,
+                clips = new System.Collections.Generic.List<SkillTimelineClip>
+                {
+                    new SkillTimelineClip
+                    {
+                        clipType = SkillTimelineClipType.Mechanism,
+                        startTime = 0f,
+                        mechanism = counterB
+                    }
+                }
+            };
+
+            var skillData = new SkillData<MockUnit>
+            {
+                SkillName = "TimelineSkill",
+                SkillType = SkillType.Active,
+                TriggerEvents = new System.Collections.Generic.List<string> { "OnAttack" }
+            };
+            var skill = SkillFactory<MockUnit>.CreateSkill(skillData);
+
+            SkillTimelineService.Play(skill, new SkillContext<MockUnit>(ownerA), timelineA);
+            SkillTimelineService.Play(skill, new SkillContext<MockUnit>(ownerB), timelineB);
+
+            SkillTimelineService.StopForOwner(ownerA);
+            SkillTimelineService.Tick(1f);
+
+            Assert.AreEqual(0, counterA.Count);
+            Assert.AreEqual(1, counterB.Count);
+        }
+
+        /// <summary>大 delta 仍应触发所有已到时间的 clip。</summary>
+        [Test]
+        public void Tick_LargeDelta_ExecutesAllDueClipsOnce()
+        {
+            var owner = new MockUnit();
+            var first = new CounterMechanism();
+            var second = new CounterMechanism();
+            var timeline = new SkillTimelineData
+            {
+                enabled = true,
+                totalDuration = 2f,
+                clips = new System.Collections.Generic.List<SkillTimelineClip>
+                {
+                    new SkillTimelineClip
+                    {
+                        clipType = SkillTimelineClipType.Mechanism,
+                        startTime = 0f,
+                        mechanism = first
+                    },
+                    new SkillTimelineClip
+                    {
+                        clipType = SkillTimelineClipType.Mechanism,
+                        startTime = 0.5f,
+                        mechanism = second
+                    }
+                }
+            };
+
+            var skillData = new SkillData<MockUnit>
+            {
+                SkillName = "TimelineSkill",
+                SkillType = SkillType.Active,
+                TriggerEvents = new System.Collections.Generic.List<string> { "OnAttack" },
+                Timeline = timeline
+            };
+            var skill = SkillFactory<MockUnit>.CreateSkill(skillData);
+
+            SkillTimelineService.Play(skill, new SkillContext<MockUnit>(owner), timeline);
+            SkillTimelineService.Tick(2f);
+
+            Assert.AreEqual(1, first.Count);
+            Assert.AreEqual(1, second.Count);
         }
     }
 }

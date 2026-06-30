@@ -17,7 +17,7 @@ namespace TechCosmos.SkillSystem.Editor
         private const string ScenePath = SceneFolder + "/SkillSystemDemo.unity";
 
         /// <summary>创建并保存 SkillSystemDemo 演示场景。</summary>
-        [MenuItem("Tech-Cosmos/SkillSystem/Samples/Create Demo Scene", priority = 20)]
+        [MenuItem("Tech-Cosmos/SkillSystem/Create Demo Scene", priority = 100)]
         public static void CreateDemoScene()
         {
             var demoCharacterType = FindType("TechCosmos.SkillSystem.Samples.DemoCharacter");

@@ -18,20 +18,20 @@ namespace TechCosmos.SkillSystem.Editor
         private const string MECHANISM_FOLDER = "Assets/Generated/Mechanisms";
         private const string CONDITION_FOLDER = "Assets/Generated/Conditions";
 
-        #region 菜单项 - 统一在 SkillSystem/Generator 下
+        #region 代码生成（菜单入口见 SkillSystemGeneratorMenu / Generate All）
 
-        /// <summary>生成机制、条件、SkillDataSO 并更新触发事件枚举。</summary>
-        [MenuItem("Tech-Cosmos/SkillSystem/Generator/Generate ALL Classes", priority = 0)]
+        /// <summary>生成机制、条件、SkillDataSO、Buff 效果类并更新全部枚举。</summary>
+        [MenuItem("Tech-Cosmos/SkillSystem/Generate All", priority = 0)]
         public static void GenerateAllClasses()
         {
             GenerateMechanismClasses();
             GenerateConditionClasses();
             SkillDataSOGenerator.GenerateAllSkillDataSO();
-            TriggerEventEnumGenerator.UpdateTriggerEventEnum();
+            BuffEffectCodeGenerator.GenerateAllBuffEffectClasses();
+            SkillSystemGeneratorMenu.RegenerateAllEnums();
         }
 
         /// <summary>为标记了 AutoGenerateMechanism 的泛型机制生成封闭子类。</summary>
-        [MenuItem("Tech-Cosmos/SkillSystem/Generator/Generate Mechanism Classes", priority = 10)]
         public static void GenerateMechanismClasses()
         {
             GenerateClasses(
@@ -43,7 +43,6 @@ namespace TechCosmos.SkillSystem.Editor
         }
 
         /// <summary>为标记了 AutoGenerateCondition 的泛型条件生成封闭子类。</summary>
-        [MenuItem("Tech-Cosmos/SkillSystem/Generator/Generate Condition Classes", priority = 11)]
         public static void GenerateConditionClasses()
         {
             GenerateClasses(
@@ -68,8 +67,8 @@ namespace TechCosmos.SkillSystem.Editor
                 .Where(a => !a.IsDynamic)
                 .ToList();
 
-            // 收集所有标记了 [GenerateMechanismsFor] 的 Unit 类型
-            var markedUnitTypes = CollectMarkedUnitTypes(allAssemblies);
+            // 收集所有 concrete IUnit<> 实现，与特性文档「未指定 Target 时为所有 IUnit 生成」一致
+            var allUnitTypes = CollectAllUnitTypes(allAssemblies);
 
             // 收集所有标记了指定 Attribute 的泛型类型
             var genericTypes = CollectGenericTypes(allAssemblies, attributeType);
@@ -86,7 +85,7 @@ namespace TechCosmos.SkillSystem.Editor
             {
                 var targets = targetTypes.Length > 0
                     ? new List<Type>(targetTypes)
-                    : markedUnitTypes;
+                    : allUnitTypes;
 
                 foreach (var unitType in targets)
                 {
@@ -113,22 +112,26 @@ namespace TechCosmos.SkillSystem.Editor
 
         #region 类型收集
 
-        private static List<Type> CollectMarkedUnitTypes(List<System.Reflection.Assembly> assemblies)
+        private static List<Type> CollectAllUnitTypes(List<System.Reflection.Assembly> assemblies)
         {
-            var types = new List<Type>();
+            var types = new HashSet<Type>();
             foreach (var assembly in assemblies)
             {
                 try
                 {
-                    var exportedTypes = assembly.GetExportedTypes()
-                        .Where(t => t.GetCustomAttributes(typeof(GenerateMechanismsForAttribute), false).Any())
-                        .Where(t => t.GetInterfaces().Any(i =>
-                            i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IUnit<>)));
-                    types.AddRange(exportedTypes);
+                    foreach (var t in assembly.GetExportedTypes())
+                    {
+                        if (!t.IsClass || t.IsAbstract) continue;
+                        if (!t.GetInterfaces().Any(i =>
+                                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IUnit<>)))
+                            continue;
+                        types.Add(t);
+                    }
                 }
                 catch { }
             }
-            return types;
+
+            return types.OrderBy(t => t.FullName).ToList();
         }
 
         private static List<(Type type, Type[] targetTypes)> CollectGenericTypes(

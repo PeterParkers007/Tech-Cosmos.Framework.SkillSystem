@@ -73,7 +73,11 @@ namespace TechCosmos.SkillSystem.Runtime
                     if (reference.preset == null || reference.preset.conditionTreeRoot == null)
                         return null;
                     if (!visitedPresets.Add(reference.preset))
+                    {
+                        UnityEngine.Debug.LogWarning(
+                            $"[ConditionTreeCompiler] 检测到循环引用: preset '{reference.preset.name}'");
                         return null;
+                    }
                     return Compile<T>(reference.preset.conditionTreeRoot, visitedPresets);
 
                 default:

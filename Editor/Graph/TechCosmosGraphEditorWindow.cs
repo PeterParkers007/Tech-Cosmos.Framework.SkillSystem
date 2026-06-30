@@ -27,11 +27,12 @@ namespace TechCosmos.SkillSystem.Editor.Graph
         private Label _titleLabel;
         private Label _hintLabel;
 
-        [MenuItem("Tech-Cosmos/SkillSystem/Graph Editor")]
-        public static void OpenWindow()
+        [MenuItem("Tech-Cosmos/SkillSystem/Graph Editor", priority = 12)]
+        public static void OpenGraphEditor()
         {
             var window = GetWindow<TechCosmosGraphEditorWindow>("技能系统 Graph");
             window.minSize = new Vector2(960, 600);
+            window.BindFromSelection();
             window.Show();
         }
 
@@ -70,21 +71,6 @@ namespace TechCosmos.SkillSystem.Editor.Graph
             window._buffTarget = null;
             window._conditionTarget = null;
             window.SetMode(GraphMode.Mechanism);
-            window.Show();
-        }
-
-        [MenuItem("Tech-Cosmos/SkillSystem/Open Graph Editor", true)]
-        private static bool ValidateOpenFromSelection()
-        {
-            return Selection.activeObject is SkillDataSO or BuffDataSO or CompositeConditionSO or CompositeMechanismSO;
-        }
-
-        [MenuItem("Tech-Cosmos/SkillSystem/Open Graph Editor", priority = 2)]
-        public static void OpenFromSelection()
-        {
-            var window = GetWindow<TechCosmosGraphEditorWindow>("技能系统 Graph");
-            window.minSize = new Vector2(960, 600);
-            window.BindFromSelection();
             window.Show();
         }
 

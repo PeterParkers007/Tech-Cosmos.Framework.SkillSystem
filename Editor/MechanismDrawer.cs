@@ -19,7 +19,7 @@ public class MechanismDrawer : PropertyDrawer
     {
         EditorGUI.BeginProperty(position, label, property);
 
-        Type ownerType = GetOwnerType(property);
+        Type ownerUnitType = GetOwnerUnitType(property);
 
         if (property.managedReferenceValue == null)
         {
@@ -29,7 +29,7 @@ public class MechanismDrawer : PropertyDrawer
             // 显示添加按钮
             if (GUI.Button(position, "Select Mechanism"))
             {
-                ShowAddMenu(property, ownerType);
+                ShowAddMenu(property, ownerUnitType);
             }
         }
         else
@@ -64,7 +64,7 @@ public class MechanismDrawer : PropertyDrawer
                 // 切换按钮
                 if (GUI.Button(new Rect(buttonRect.x, buttonRect.y, thirdWidth - 2, buttonRect.height), "Switch"))
                 {
-                    ShowAddMenu(property, ownerType);
+                    ShowAddMenu(property, ownerUnitType);
                 }
 
                 // 复制按钮
@@ -114,7 +114,7 @@ public class MechanismDrawer : PropertyDrawer
         return EditorGUI.GetPropertyHeight(property, true) + EditorGUIUtility.singleLineHeight * 2 + 4;
     }
 
-    private void ShowAddMenu(SerializedProperty property, Type ownerType)
+    private void ShowAddMenu(SerializedProperty property, Type ownerUnitType)
     {
         var menu = new GenericMenu();
 
@@ -128,7 +128,7 @@ public class MechanismDrawer : PropertyDrawer
         menu.AddSeparator("");
 
         // 获取所有可用的机制类型
-        var availableTypes = GetAvailableMechanismTypes(ownerType);
+        var availableTypes = GetAvailableMechanismTypes(ownerUnitType);
 
         if (availableTypes.Count == 0)
         {
@@ -155,7 +155,7 @@ public class MechanismDrawer : PropertyDrawer
                         {
                             try
                             {
-                                var instance = CreateMechanismInstance(type, ownerType);
+                                var instance = CreateMechanismInstance(type, ownerUnitType);
                                 property.managedReferenceValue = instance;
                                 property.serializedObject.ApplyModifiedProperties();
                             }
@@ -239,9 +239,9 @@ public class MechanismDrawer : PropertyDrawer
         return name.Trim();
     }
 
-    private List<Type> GetAvailableMechanismTypes(Type ownerType)
+    private List<Type> GetAvailableMechanismTypes(Type ownerUnitType)
     {
-        string cacheKey = ownerType?.FullName ?? "unknown";
+        string cacheKey = ownerUnitType?.FullName ?? "all";
 
         if (typeCache.TryGetValue(cacheKey, out var cached))
             return cached;
@@ -275,6 +275,13 @@ public class MechanismDrawer : PropertyDrawer
             // 必须有默认构造函数
             if (type.GetConstructor(Type.EmptyTypes) == null)
                 continue;
+
+            if (ownerUnitType != null)
+            {
+                var mechanismUnitType = GetMechanismUnitType(type);
+                if (mechanismUnitType != null && mechanismUnitType != ownerUnitType)
+                    continue;
+            }
 
             if (seenTypes.Add(type))
                 types.Add(type);
@@ -342,22 +349,35 @@ public class MechanismDrawer : PropertyDrawer
         return null;
     }
 
-    private Type GetOwnerType(SerializedProperty property)
+    private Type GetMechanismUnitType(Type mechanismType)
     {
-        var targetObject = property.serializedObject.targetObject;
-        return targetObject?.GetType();
+        var current = mechanismType;
+        while (current != null && current != typeof(object))
+        {
+            if (current.IsGenericType && current.GetGenericTypeDefinition() == typeof(Mechanism<>))
+                return current.GetGenericArguments()[0];
+            current = current.BaseType;
+        }
+
+        return null;
     }
 
-    private object CreateMechanismInstance(Type type, Type ownerType)
+    private Type GetOwnerUnitType(SerializedProperty property)
+    {
+        var targetObject = property.serializedObject.targetObject;
+        if (targetObject is SkillDataSO skillDataSO)
+            return skillDataSO.GetUnitType();
+
+        return InferUnitType(targetObject?.GetType());
+    }
+
+    private object CreateMechanismInstance(Type type, Type ownerUnitType)
     {
         // 如果是泛型类型定义，需要构造封闭泛型
         if (type.IsGenericTypeDefinition)
         {
-            var unitType = InferUnitType(ownerType);
-            if (unitType != null)
-            {
-                type = type.MakeGenericType(unitType);
-            }
+            if (ownerUnitType != null)
+                type = type.MakeGenericType(ownerUnitType);
         }
 
         return Activator.CreateInstance(type);

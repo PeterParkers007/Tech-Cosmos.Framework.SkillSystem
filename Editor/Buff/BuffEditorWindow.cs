@@ -25,26 +25,14 @@ namespace TechCosmos.SkillSystem.Editor
 
         private Dictionary<string, bool> _foldoutStates = new();
 
-        [MenuItem("Tech-Cosmos/SkillSystem/Buff Editor Window")]
-        public static void OpenWindow()
+        [MenuItem("Tech-Cosmos/SkillSystem/Buff Editor", priority = 11)]
+        public static void OpenBuffEditor()
         {
             var window = GetWindow<BuffEditorWindow>("Buff 编辑器");
             window.minSize = new Vector2(500, 600);
-            window.Show();
-        }
-
-        [MenuItem("Tech-Cosmos/SkillSystem/Open Buff Editor", true)]
-        private static bool OpenWindowValidate() => Selection.activeObject is BuffDataSO;
-
-        [MenuItem("Tech-Cosmos/SkillSystem/Open Buff Editor", priority = 5)]
-        public static void OpenFromSelection()
-        {
             if (Selection.activeObject is BuffDataSO so)
-            {
-                var window = GetWindow<BuffEditorWindow>("Buff 编辑器");
                 window.SetTarget(so);
-                window.Show();
-            }
+            window.Show();
         }
 
         private void OnEnable()
@@ -390,11 +378,7 @@ namespace TechCosmos.SkillSystem.Editor
             if (!_modifyEnumSearched)
             {
                 _modifyEnumSearched = true;
-                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    var type = asm.GetType("TechCosmos.SkillSystem.Runtime.BuffModifyType");
-                    if (type != null && type.IsEnum) { _cachedModifyEnumType = type; break; }
-                }
+                _cachedModifyEnumType = SkillSystemEnumGenerator.ResolveRuntimeEnumType(SkillSystemEnumKind.BuffModifyType);
             }
             return _cachedModifyEnumType;
         }
@@ -404,11 +388,7 @@ namespace TechCosmos.SkillSystem.Editor
             if (!_actionEnumSearched)
             {
                 _actionEnumSearched = true;
-                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    var type = asm.GetType("TechCosmos.SkillSystem.Runtime.BuffActionType");
-                    if (type != null && type.IsEnum) { _cachedActionEnumType = type; break; }
-                }
+                _cachedActionEnumType = SkillSystemEnumGenerator.ResolveRuntimeEnumType(SkillSystemEnumKind.TriggerEvent);
             }
             return _cachedActionEnumType;
         }
@@ -418,11 +398,7 @@ namespace TechCosmos.SkillSystem.Editor
             if (!_tagEnumSearched)
             {
                 _tagEnumSearched = true;
-                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    var type = asm.GetType("TechCosmos.SkillSystem.Runtime.BuffTag");
-                    if (type != null && type.IsEnum) { _cachedTagEnumType = type; break; }
-                }
+                _cachedTagEnumType = SkillSystemEnumGenerator.ResolveRuntimeEnumType(SkillSystemEnumKind.BuffTag);
             }
             return _cachedTagEnumType;
         }
@@ -919,13 +895,13 @@ namespace TechCosmos.SkillSystem.Editor
             var enumType = GetBuffActionEnumType();
             if (enumType != null && Enum.TryParse(enumType, prop.stringValue, out var enumVal))
             {
-                var newVal = EditorGUILayout.EnumPopup("事件名", (Enum)enumVal);
+                var newVal = EditorGUILayout.EnumPopup("TriggerEvent", (Enum)enumVal);
                 if (newVal.ToString() != prop.stringValue)
                     prop.stringValue = newVal.ToString();
             }
             else
             {
-                prop.stringValue = EditorGUILayout.TextField("事件名", prop.stringValue);
+                prop.stringValue = EditorGUILayout.TextField("TriggerEvent", prop.stringValue);
             }
         }
 

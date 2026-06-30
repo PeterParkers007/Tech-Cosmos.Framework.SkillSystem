@@ -13,7 +13,7 @@ namespace TechCosmos.SkillSystem.Runtime
         public int ExecutionPriority { get; private set; }
 
         private string[] _cachedTriggerEvents = System.Array.Empty<string>();
-        private int _cachedTriggerEventsVersion = -1;
+        private int _cachedTriggerEventsHash = int.MinValue;
 
         public BaseLayer(List<string> triggerEvents)
         {
@@ -28,7 +28,8 @@ namespace TechCosmos.SkillSystem.Runtime
         {
             var events = TriggerEvents;
             int count = events?.Count ?? 0;
-            if (_cachedTriggerEventsVersion == count && _cachedTriggerEvents.Length == count)
+            int hash = ComputeEventsHash(events);
+            if (_cachedTriggerEventsHash == hash && _cachedTriggerEvents.Length == count)
                 return _cachedTriggerEvents;
 
             if (count == 0)
@@ -42,8 +43,21 @@ namespace TechCosmos.SkillSystem.Runtime
                     _cachedTriggerEvents[i] = events[i];
             }
 
-            _cachedTriggerEventsVersion = count;
+            _cachedTriggerEventsHash = hash;
             return _cachedTriggerEvents;
+        }
+
+        private static int ComputeEventsHash(List<string> events)
+        {
+            if (events == null || events.Count == 0) return 0;
+
+            unchecked
+            {
+                int hash = 17;
+                for (int i = 0; i < events.Count; i++)
+                    hash = hash * 31 + (events[i]?.GetHashCode() ?? 0);
+                return hash;
+            }
         }
 
         public virtual void Trigger(SkillContext<T> context) { }

@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 namespace TechCosmos.SkillSystem.Runtime
 {
@@ -13,7 +14,12 @@ namespace TechCosmos.SkillSystem.Runtime
             if (context is SkillContext<T> typedContext && dataLayer is IDataLayer<T> typedDataLayer)
             {
                 Execute(typedContext, typedDataLayer);
+                return;
             }
+
+            Debug.LogWarning(
+                $"[Mechanism] 类型不匹配，跳过执行: {GetType().Name} 需要 SkillContext<{typeof(T).Name}> / IDataLayer<{typeof(T).Name}>，" +
+                $"实际 context={context?.GetType().Name ?? "null"}, dataLayer={dataLayer?.GetType().Name ?? "null"}");
         }
 
         /// <summary>执行机制效果。</summary>

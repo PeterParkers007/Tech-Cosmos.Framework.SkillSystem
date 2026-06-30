@@ -28,8 +28,10 @@ namespace TechCosmos.SkillSystem.Editor
             if (skillDataSO.TriggerEvents == null || skillDataSO.TriggerEvents.Count == 0)
                 issues.Add("未配置触发事件");
 
-            if (skillDataSO.Mechanisms == null || skillDataSO.Mechanisms.Count == 0)
-                issues.Add("机制列表为空");
+            bool hasMechanisms = skillDataSO.useMechanismTree && skillDataSO.mechanismTreeRoot != null
+                || (skillDataSO.Mechanisms != null && skillDataSO.Mechanisms.Count > 0);
+            if (!hasMechanisms)
+                issues.Add("未配置机制（列表或机制树）");
 
             if (skillDataSO.Timeline != null && skillDataSO.Timeline.enabled && skillDataSO.Timeline.totalDuration <= 0f)
                 issues.Add("Timeline 已启用但总时长 <= 0");
@@ -53,6 +55,21 @@ namespace TechCosmos.SkillSystem.Editor
                 {
                     if (skillDataSO.Mechanisms[i] == null)
                         issues.Add($"机制 [{i}] 为空引用");
+                }
+            }
+
+            var unitType = skillDataSO.GetUnitType();
+            if (unitType != null)
+            {
+                foreach (var mechanism in MechanismTreeEditorUtility.EnumerateAllMechanisms(skillDataSO))
+                {
+                    if (mechanism is ITypedMechanism typedMechanism &&
+                        typedMechanism.GetUnitType() != unitType)
+                    {
+                        issues.Add(
+                            $"机制 {mechanism.GetType().Name} 的 Unit 类型 {typedMechanism.GetUnitType().Name} " +
+                            $"与 SO 的 {unitType.Name} 不匹配");
+                    }
                 }
             }
 

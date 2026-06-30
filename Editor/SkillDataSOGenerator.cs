@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.Serialization;
 using UnityEditor;
 using UnityEngine;
 using TechCosmos.SkillSystem.Runtime;
@@ -43,15 +44,12 @@ namespace TechCosmos.SkillSystem.Editor
         };
 
         /// <summary>扫描所有 IUnit 实现并生成对应的 SkillDataSO 类。</summary>
-        [MenuItem("Tech-Cosmos/SkillSystem/Generator/Generate All SkillDataSO")]
         public static void GenerateAllSkillDataSO()
         {
             if (!Directory.Exists(GENERATED_FOLDER))
                 Directory.CreateDirectory(GENERATED_FOLDER);
 
-            foreach (var file in Directory.GetFiles(GENERATED_FOLDER, "*.g.cs"))
-                File.Delete(file);
-
+            var pendingFiles = new Dictionary<string, string>();
             var allAssemblies = AppDomain.CurrentDomain.GetAssemblies()
                 .Where(a => !a.IsDynamic)
                 .ToList();
@@ -70,8 +68,16 @@ namespace TechCosmos.SkillSystem.Editor
 
                     foreach (var type in types)
                     {
-                        GenerateSkillDataSOForType(type);
-                        generatedCount++;
+                        try
+                        {
+                            var (fileName, code) = BuildSkillDataSOCode(type);
+                            pendingFiles[fileName] = code;
+                            generatedCount++;
+                        }
+                        catch (Exception e)
+                        {
+                            Debug.LogError($"生成 SkillDataSO 失败 [{type.Name}]: {e.Message}");
+                        }
                     }
                 }
                 catch (Exception e)
@@ -80,11 +86,17 @@ namespace TechCosmos.SkillSystem.Editor
                 }
             }
 
+            foreach (var file in Directory.GetFiles(GENERATED_FOLDER, "*.g.cs"))
+                File.Delete(file);
+
+            foreach (var kv in pendingFiles)
+                File.WriteAllText(Path.Combine(GENERATED_FOLDER, kv.Key), kv.Value, Encoding.UTF8);
+
             AssetDatabase.Refresh();
             Debug.Log($"✅ 成功生成 {generatedCount} 个 SkillDataSO 类到 {GENERATED_FOLDER}");
         }
 
-        private static void GenerateSkillDataSOForType(Type unitType)
+        private static (string fileName, string code) BuildSkillDataSOCode(Type unitType)
         {
             var attr = unitType.GetCustomAttribute<GenerateSkillDataSOAttribute>();
             var unitTypeName = unitType.Name;
@@ -107,7 +119,13 @@ namespace TechCosmos.SkillSystem.Editor
             }
 
             var code = GenerateClassCode(unitTypeName, className, menuName, markedFields, dataEntries);
-            var filePath = Path.Combine(GENERATED_FOLDER, $"{className}.g.cs");
+            return ($"{className}.g.cs", code);
+        }
+
+        private static void GenerateSkillDataSOForType(Type unitType)
+        {
+            var (fileName, code) = BuildSkillDataSOCode(unitType);
+            var filePath = Path.Combine(GENERATED_FOLDER, fileName);
             File.WriteAllText(filePath, code, Encoding.UTF8);
         }
 
@@ -215,6 +233,32 @@ namespace TechCosmos.SkillSystem.Editor
             }
 
             sb.AppendLine("        #endregion");
+            sb.AppendLine();
+
+            var generatedDataKeys = new HashSet<string>();
+            foreach (var group in fieldGroups)
+            {
+                foreach (var prop in group.Value)
+                {
+                    if (!prop.IsComplex)
+                        generatedDataKeys.Add(prop.DataKey);
+                }
+            }
+            foreach (var entry in dataEntries)
+                generatedDataKeys.Add(entry.key);
+
+            if (generatedDataKeys.Count > 0)
+            {
+                sb.AppendLine("        public override HashSet<string> GetGeneratedKeys()");
+                sb.AppendLine("        {");
+                sb.AppendLine("            var keys = base.GetGeneratedKeys();");
+                foreach (var key in generatedDataKeys.OrderBy(k => k))
+                    sb.AppendLine($"            keys.Add(\"{key}\");");
+                sb.AppendLine("            return keys;");
+                sb.AppendLine("        }");
+                sb.AppendLine();
+            }
+
             sb.AppendLine("    }");
             sb.AppendLine("}");
 
@@ -270,7 +314,7 @@ namespace TechCosmos.SkillSystem.Editor
                     Category = category,
                     PropertyType = typeName,
                     GetterCode = isComplex ? fieldName : $"GetValue<{typeName}>(\"{fieldName}\")",
-                    DefaultValue = GetDefaultValueForType(fieldType, field.GetValue(Activator.CreateInstance(field.DeclaringType))),
+                    DefaultValue = GetDefaultValueForType(fieldType, TryReadFieldDefault(field, field.DeclaringType)),
                     IsComplex = isComplex
                 };
                 properties.Add(prop);
@@ -297,12 +341,36 @@ namespace TechCosmos.SkillSystem.Editor
                         ? $"({subTypeName})GetValue<int>(\"{fieldName}.{subField.Name}\")"
                         : $"GetValue<{subTypeName}>(\"{fieldName}.{subField.Name}\")",
                     DefaultValue = GetDefaultValueForType(subField.FieldType,
-                        subField.GetValue(Activator.CreateInstance(fieldType))),
+                        TryReadFieldDefault(subField, fieldType)),
                     IsComplex = subIsComplex
                 });
             }
 
             return properties;
+        }
+
+        private static object TryReadFieldDefault(FieldInfo field, Type declaringType)
+        {
+            if (field == null || declaringType == null)
+                return null;
+
+            try
+            {
+                if (typeof(MonoBehaviour).IsAssignableFrom(declaringType))
+                    return null;
+
+                object instance;
+                if (declaringType.IsValueType)
+                    instance = Activator.CreateInstance(declaringType);
+                else
+                    instance = FormatterServices.GetUninitializedObject(declaringType);
+
+                return field.GetValue(instance);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static bool IsComplexTypeName(string typeName)

@@ -77,7 +77,7 @@ namespace TechCosmos.SkillSystem.Runtime
             }
 
             ExecutionController?.Cancel();
-            SkillTimelineService.StopAll();
+            SkillTimelineService.StopForOwner((T)(object)this);
             BuffSystem?.ClearBuff();
             SkillHolder?.RemoveAllSkills();
         }

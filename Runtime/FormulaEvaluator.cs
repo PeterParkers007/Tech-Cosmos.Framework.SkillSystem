@@ -18,11 +18,8 @@ namespace TechCosmos.SkillSystem.Runtime
         private static readonly Regex RandomRegex =
             new(@"random\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)", RegexOptions.Compiled);
 
-        private static readonly Regex MulDivTokenRegex =
-            new(@"(-?\d+\.?\d*|[\*/])", RegexOptions.Compiled);
-
-        private static readonly Regex AddSubRegex =
-            new(@"(-?\d+\.?\d*|[+\-])", RegexOptions.Compiled);
+        private static readonly Regex MulDivExprRegex =
+            new(@"(-?\d+\.?\d*)([\*/])(-?\d+\.?\d*)", RegexOptions.Compiled);
 
         private static readonly Dictionary<string, float> _expressionCache = new();
 
@@ -146,95 +143,80 @@ namespace TechCosmos.SkillSystem.Runtime
         private static string HandleUnaryMinus(string expr)
         {
             if (string.IsNullOrEmpty(expr)) return expr;
-            if (expr[0] == '-') expr = "0" + expr;
             expr = expr.Replace("(-", "(0-");
             return expr;
         }
 
         private static string EvaluateMultiplyDivide(string expr)
         {
-            var tokens = Tokenize(expr);
-            for (int i = 0; i < tokens.Count; i++)
+            var match = MulDivExprRegex.Match(expr);
+            while (match.Success)
             {
-                if (tokens[i].Contains("*") || tokens[i].Contains("/"))
-                    tokens[i] = EvaluateMulDivToken(tokens[i]);
-            }
-            return string.Join("", tokens);
-        }
+                float left = float.Parse(match.Groups[1].Value, NumberStyles.Float | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+                float right = float.Parse(match.Groups[3].Value, NumberStyles.Float | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+                float result = match.Groups[2].Value[0] == '*'
+                    ? left * right
+                    : (right != 0f ? left / right : 0f);
 
-        private static string EvaluateMulDivToken(string token)
-        {
-            var numbers = new List<float>();
-            var operators = new List<char>();
-
-            foreach (Match match in MulDivTokenRegex.Matches(token))
-            {
-                string val = match.Value;
-                if (val == "*" || val == "/")
-                    operators.Add(val[0]);
-                else if (float.TryParse(val, NumberStyles.Float | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out float num))
-                    numbers.Add(num);
+                expr = expr.Substring(0, match.Index)
+                    + result.ToString(CultureInfo.InvariantCulture)
+                    + expr.Substring(match.Index + match.Length);
+                match = MulDivExprRegex.Match(expr);
             }
 
-            if (numbers.Count == 0) return token;
-
-            float result = numbers[0];
-            for (int i = 0; i < operators.Count; i++)
-            {
-                float next = numbers[i + 1];
-                result = operators[i] == '*' ? result * next : (next != 0 ? result / next : 0);
-            }
-
-            return result.ToString(CultureInfo.InvariantCulture);
+            return expr;
         }
 
         private static string EvaluateAddSubtract(string expr)
         {
             var numbers = new List<float>();
             var operators = new List<char>();
-            bool expectNumber = true;
+            int i = 0;
 
-            foreach (Match match in AddSubRegex.Matches(expr))
+            while (i < expr.Length)
             {
-                string val = match.Value;
-                if ((val == "+" || val == "-") && !expectNumber)
+                char c = expr[i];
+                if (c == '+' || c == '-')
                 {
-                    operators.Add(val[0]);
-                    expectNumber = true;
+                    if (i > 0 && expr[i - 1] != '+' && expr[i - 1] != '-')
+                    {
+                        operators.Add(c);
+                        i++;
+                        continue;
+                    }
                 }
-                else if (float.TryParse(val, NumberStyles.Float | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out float num))
+
+                if (c == '+' || c == '-' || char.IsDigit(c) || c == '.')
                 {
-                    numbers.Add(num);
-                    expectNumber = false;
+                    int start = i;
+                    if (expr[i] == '+' || expr[i] == '-')
+                        i++;
+                    while (i < expr.Length && (char.IsDigit(expr[i]) || expr[i] == '.'))
+                        i++;
+
+                    var token = expr.Substring(start, i - start);
+                    if (float.TryParse(token, NumberStyles.Float | NumberStyles.AllowLeadingSign,
+                            CultureInfo.InvariantCulture, out float num))
+                    {
+                        numbers.Add(num);
+                    }
+                }
+                else
+                {
+                    i++;
                 }
             }
 
             if (numbers.Count == 0) return expr;
 
             float result = numbers[0];
-            for (int i = 0; i < operators.Count; i++)
+            for (int op = 0; op < operators.Count; op++)
             {
-                float next = numbers[i + 1];
-                result = operators[i] == '+' ? result + next : result - next;
+                float next = numbers[op + 1];
+                result = operators[op] == '+' ? result + next : result - next;
             }
 
             return result.ToString(CultureInfo.InvariantCulture);
-        }
-
-        private static List<string> Tokenize(string expr)
-        {
-            var tokens = new List<string>();
-            int lastIndex = 0;
-            for (int i = 1; i < expr.Length; i++)
-            {
-                if ((expr[i] == '+' || expr[i] == '-') && expr[i - 1] != '*' && expr[i - 1] != '/')
-                {
-                    tokens.Add(expr.Substring(lastIndex, i - lastIndex));
-                    lastIndex = i;
-                }
-            }
-            tokens.Add(expr.Substring(lastIndex));
-            return tokens;
         }
 
         private static class PathResolver

@@ -25,7 +25,7 @@ namespace TechCosmos.SkillSystem.Editor
         private string searchFilter = "";
         private bool typesDirty = true;
         /// <summary>打开创建技能脚本窗口。</summary>
-        [MenuItem("Tech-Cosmos/SkillSystem/Create Skill Script", priority = 1)]
+        [MenuItem("Tech-Cosmos/SkillSystem/Create Skill Script", priority = 30)]
         public static void OpenWindow()
         {
             var window = GetWindow<CreateSkillScriptWindow>("创建技能脚本");

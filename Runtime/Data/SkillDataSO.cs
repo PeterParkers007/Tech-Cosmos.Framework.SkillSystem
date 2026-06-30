@@ -31,7 +31,7 @@ namespace TechCosmos.SkillSystem.Runtime
         public List<ConditionBase> Conditions = new();
 
         /// <summary>是否使用条件树而非平铺列表。</summary>
-        public bool useConditionTree = true;
+        public bool useConditionTree;
 
         [SerializeReference]
         /// <summary>条件树根节点。</summary>
@@ -125,7 +125,7 @@ namespace TechCosmos.SkillSystem.Runtime
         public List<DataEntry> GetSerializedData() => serializedData;
 
         /// <summary>获取代码生成器自动注入的属性键集合。</summary>
-        public HashSet<string> GetGeneratedKeys()
+        public virtual HashSet<string> GetGeneratedKeys()
         {
             var keys = new HashSet<string>();
             try

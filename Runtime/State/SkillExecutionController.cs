@@ -151,8 +151,9 @@ namespace TechCosmos.SkillSystem.Runtime
             var cast = _activeCast;
             _activeCast = null;
 
-            SkillExecutionPipeline.Execute(cast.skill, cast.context);
-            OnCastCompleted?.Invoke(cast.skill, cast.context);
+            var result = SkillExecutionPipeline.Execute(cast.skill, cast.context);
+            if (result == SkillExecutionResult.Success)
+                OnCastCompleted?.Invoke(cast.skill, cast.context);
         }
 
         private bool CanInterruptCurrent(SkillProfile incoming)

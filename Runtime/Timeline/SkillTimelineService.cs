@@ -24,10 +24,14 @@ namespace TechCosmos.SkillSystem.Runtime
         private SkillContext<T> _context;
         private float _elapsed;
         private int _nextClipIndex;
+        private int[] _sortedClipIndices;
+        private readonly HashSet<int> _executedClipIndices = new();
 
         public bool IsPlaying { get; private set; }
         /// <summary>已播放时长（秒）。</summary>
         public float Elapsed => _elapsed;
+        /// <summary>时间轴所属施法者（用于按单位停止）。</summary>
+        public object Owner { get; private set; }
 
         public SkillTimelinePlayer(ISkill<T> skill, SkillTimelineData timeline)
         {
@@ -42,25 +46,27 @@ namespace TechCosmos.SkillSystem.Runtime
                 return;
 
             _context = context.WithSkill(_skill);
+            Owner = context.caster;
             _elapsed = 0f;
             _nextClipIndex = 0;
+            _executedClipIndices.Clear();
             IsPlaying = true;
-            _timeline.clips.Sort((a, b) => a.startTime.CompareTo(b.startTime));
+            BuildSortedClipIndices();
         }
 
         public void Tick(float deltaTime)
         {
-            if (!IsPlaying || _timeline == null) return;
+            if (!IsPlaying || _timeline == null || _sortedClipIndices == null) return;
 
-            float previous = _elapsed;
             _elapsed += deltaTime;
 
             var clips = _timeline.clips;
-            while (_nextClipIndex < clips.Count && clips[_nextClipIndex].startTime <= _elapsed)
+            while (_nextClipIndex < _sortedClipIndices.Length &&
+                   clips[_sortedClipIndices[_nextClipIndex]].startTime <= _elapsed)
             {
-                var clip = clips[_nextClipIndex];
-                if (clip.startTime >= previous)
-                    ExecuteClip(clip);
+                int clipIndex = _sortedClipIndices[_nextClipIndex];
+                if (_executedClipIndices.Add(clipIndex))
+                    ExecuteClip(clips[clipIndex]);
                 _nextClipIndex++;
             }
 
@@ -72,6 +78,19 @@ namespace TechCosmos.SkillSystem.Runtime
         {
             IsPlaying = false;
             _nextClipIndex = 0;
+            _executedClipIndices.Clear();
+            Owner = null;
+        }
+
+        private void BuildSortedClipIndices()
+        {
+            int count = _timeline.clips.Count;
+            _sortedClipIndices = new int[count];
+            for (int i = 0; i < count; i++)
+                _sortedClipIndices[i] = i;
+
+            System.Array.Sort(_sortedClipIndices, (a, b) =>
+                _timeline.clips[a].startTime.CompareTo(_timeline.clips[b].startTime));
         }
 
         private void ExecuteClip(SkillTimelineClip clip)
@@ -95,7 +114,13 @@ namespace TechCosmos.SkillSystem.Runtime
     /// </summary>
     public static class SkillTimelineService
     {
-        private static readonly List<ISkillTimelinePlayer> _activePlayers = new();
+        private sealed class TimelinePlayerEntry
+        {
+            public ISkillTimelinePlayer Player;
+            public object Owner;
+        }
+
+        private static readonly List<TimelinePlayerEntry> _activePlayers = new();
 
         /// <summary>创建并启动时间轴播放。</summary>
         public static void Play<T>(ISkill<T> skill, SkillContext<T> context, SkillTimelineData timeline)
@@ -105,7 +130,11 @@ namespace TechCosmos.SkillSystem.Runtime
 
             var player = new SkillTimelinePlayer<T>(skill, timeline);
             player.Play(context);
-            _activePlayers.Add(player);
+            _activePlayers.Add(new TimelinePlayerEntry
+            {
+                Player = player,
+                Owner = context.caster
+            });
         }
 
         /// <summary>推进所有活跃时间轴（每帧调用）。</summary>
@@ -113,10 +142,25 @@ namespace TechCosmos.SkillSystem.Runtime
         {
             for (int i = _activePlayers.Count - 1; i >= 0; i--)
             {
-                var player = _activePlayers[i];
+                var player = _activePlayers[i].Player;
                 player.Tick(deltaTime);
                 if (!player.IsPlaying)
                     _activePlayers.RemoveAt(i);
+            }
+        }
+
+        /// <summary>停止指定 owner 上的所有时间轴。</summary>
+        public static void StopForOwner(object owner)
+        {
+            if (owner == null) return;
+
+            for (int i = _activePlayers.Count - 1; i >= 0; i--)
+            {
+                if (!ReferenceEquals(_activePlayers[i].Owner, owner))
+                    continue;
+
+                _activePlayers[i].Player.Stop();
+                _activePlayers.RemoveAt(i);
             }
         }
 
@@ -124,7 +168,7 @@ namespace TechCosmos.SkillSystem.Runtime
         public static void StopAll()
         {
             for (int i = _activePlayers.Count - 1; i >= 0; i--)
-                _activePlayers[i].Stop();
+                _activePlayers[i].Player.Stop();
             _activePlayers.Clear();
         }
     }

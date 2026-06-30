@@ -24,7 +24,7 @@ namespace TechCosmos.SkillSystem.Editor
         private string searchFilter = "";
         private bool typesDirty = true;
 
-        [MenuItem("Tech-Cosmos/SkillSystem/Create Buff Script", priority = 1)]
+        [MenuItem("Tech-Cosmos/SkillSystem/Create Buff Script", priority = 31)]
         public static void OpenWindow()
         {
             var window = GetWindow<CreateBuffEffectWindow>("创建 Buff 脚本");

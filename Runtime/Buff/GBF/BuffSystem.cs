@@ -138,14 +138,24 @@ namespace TechCosmos.SkillSystem.Runtime
             if (buff != null) buff.isOver = true;
         }
 
-        public void ClearBuff() => buffs.Clear();
+        public void ClearBuff()
+        {
+            for (int i = buffs.Count - 1; i >= 0; i--)
+            {
+                var buff = buffs[i];
+                buffs.RemoveAt(i);
+                OnBuffRemoved?.Invoke(buff);
+            }
+
+            _pendingAddBuffs.Clear();
+        }
 
         public void DispelByTags(params string[] tags)
         {
             for (int i = buffs.Count - 1; i >= 0; i--)
             {
-                if (CheckBuffHasAnyTag(buffs[i], tags))
-                    ManualRemoveBuff(buffs[i]);
+                if (!buffs[i].isOver && CheckBuffHasAnyTag(buffs[i], tags))
+                    RemoveBuff(buffs[i]);
             }
         }
 
@@ -153,8 +163,8 @@ namespace TechCosmos.SkillSystem.Runtime
         {
             for (int i = buffs.Count - 1; i >= 0; i--)
             {
-                if (buffs[i].BuffName == buffName)
-                    ManualRemoveBuff(buffs[i]);
+                if (!buffs[i].isOver && buffs[i].BuffName == buffName)
+                    RemoveBuff(buffs[i]);
             }
         }
 
@@ -218,11 +228,25 @@ namespace TechCosmos.SkillSystem.Runtime
 
         public bool HasAllBuff(params string[] tags)
         {
-            for (int i = 0; i < buffs.Count; i++)
+            if (tags == null || tags.Length == 0) return true;
+
+            for (int i = 0; i < tags.Length; i++)
             {
-                if (CheckBuffHasAllTags(buffs[i], tags)) return true;
+                bool tagFound = false;
+                for (int j = 0; j < buffs.Count; j++)
+                {
+                    if (buffs[j].isOver) continue;
+                    if (CheckBuffHasAnyTag(buffs[j], tags[i]))
+                    {
+                        tagFound = true;
+                        break;
+                    }
+                }
+
+                if (!tagFound) return false;
             }
-            return false;
+
+            return true;
         }
 
         public IBuff<T> FindBuffByAnyTag(params string[] tags)
@@ -267,6 +291,7 @@ namespace TechCosmos.SkillSystem.Runtime
         {
             for (int i = 0; i < buffs.Count; i++)
             {
+                if (buffs[i].isOver) continue;
                 if (buffs[i].BuffName == buffName) return buffs[i];
             }
             return null;

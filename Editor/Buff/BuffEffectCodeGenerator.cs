@@ -16,15 +16,13 @@ namespace TechCosmos.SkillSystem.Editor
         private const string EFFECT_GENERATED_FOLDER = "Assets/Generated/SkillSystem/Effects";
         private const string MODE_GENERATED_FOLDER = "Assets/Generated/SkillSystem/ExecutionModes";
 
-        [MenuItem("Tech-Cosmos/SkillSystem/Generate All BuffEffect Classes", priority = 20)]
         public static void GenerateAllBuffEffectClasses()
         {
             GenerateEffectClasses();
             GenerateExecutionModeClasses();
-            Debug.Log("GBF: BuffEffect �� ExecutionMode ���������");
+            Debug.Log("GBF: BuffEffect 与 ExecutionMode 生成完成");
         }
 
-        [MenuItem("Tech-Cosmos/SkillSystem/Generate BuffEffect Classes", priority = 21)]
         public static void GenerateEffectClasses()
         {
             GenerateClasses(
@@ -34,7 +32,6 @@ namespace TechCosmos.SkillSystem.Editor
             );
         }
 
-        [MenuItem("Tech-Cosmos/SkillSystem/Generate ExecutionMode Classes", priority = 22)]
         public static void GenerateExecutionModeClasses()
         {
             GenerateClasses(
